@@ -182,3 +182,5 @@ can be opened:
 
 The staged contract is documented in
 [`docs/TECHNICAL_PLAN_PHASE1_4.md`](docs/TECHNICAL_PLAN_PHASE1_4.md).
+Construction stopped without replication; the evidence and mapping limitation
+are recorded in [`docs/PHASE1_4_RESULTS.md`](docs/PHASE1_4_RESULTS.md).
