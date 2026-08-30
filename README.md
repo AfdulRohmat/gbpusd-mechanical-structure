@@ -25,7 +25,9 @@ future leakage.
 
 ## Current status
 
-Phase 0 is active. It defines and validates labels; it does not trade.
+Phase 0 baseline has been executed. It defines and validates labels; it does not
+trade. The baseline gate failed on ambiguity, sparse Daily events, and one H1
+S/R sensitivity, while every point-in-time invariant passed.
 
 - No strategy P&L has been inspected.
 - BOS, CHoCH, FVG, swing, and S/R definitions are initial operational
@@ -41,6 +43,7 @@ See:
 - `docs/SHARED_DATA_CONTRACT.md`
 - `docs/TEMPORARY_EXECUTION_MODEL.md`
 - `docs/DATA_BASELINE_2024_2025.md`
+- `docs/PHASE0_RESULTS.md`
 
 ## Setup
 
@@ -98,3 +101,14 @@ Audit the linked dataset with:
 ```bash
 .venv/bin/python -m gbpusd_structure audit-data
 ```
+
+Run the Phase-0 definition audit (no trades and no P&L):
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase0
+```
+
+The command writes fingerprinted, gitignored tables and reports below
+`artifacts/phase0/`. A non-zero exit status means at least one registered
+definition gate failed; it does not mean the command crashed. Inspect that
+run's `summary.json` for the exact failed scopes.

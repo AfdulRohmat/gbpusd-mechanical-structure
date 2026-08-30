@@ -3,6 +3,10 @@ swings:
   right_bars: 2
   equal_price_tolerance_pips: 1.0
 
+volatility:
+  atr_period: 14
+  method: simple_true_range_mean
+
 breaks:
   confirmation: close
   minimum_buffer_atr: 0.05
@@ -28,3 +32,9 @@ indicators:
 order_block:
   enabled: false
   status: deferred_pending_operational_definition
+
+audit:
+  minimum_bar_coverage_ratio: 0.95
+  maximum_ambiguous_swing_fraction: 0.05
+  minimum_sensitivity_event_agreement: 0.70
+  minimum_events_per_year: 30

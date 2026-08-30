@@ -190,6 +190,11 @@ class SwingConfig(StrictModel):
     equal_price_tolerance_pips: float = Field(ge=0)
 
 
+class VolatilityConfig(StrictModel):
+    atr_period: int = Field(ge=2)
+    method: Literal["simple_true_range_mean"]
+
+
 class BreakConfig(StrictModel):
     confirmation: Literal["close"]
     minimum_buffer_atr: float = Field(ge=0)
@@ -228,13 +233,22 @@ class OrderBlockConfig(StrictModel):
     status: Literal["deferred_pending_operational_definition"]
 
 
+class StructureAuditConfig(StrictModel):
+    minimum_bar_coverage_ratio: float = Field(gt=0, le=1)
+    maximum_ambiguous_swing_fraction: float = Field(ge=0, lt=1)
+    minimum_sensitivity_event_agreement: float = Field(gt=0, le=1)
+    minimum_events_per_year: int = Field(ge=1)
+
+
 class StructureConfig(StrictModel):
     swings: SwingConfig
+    volatility: VolatilityConfig
     breaks: BreakConfig
     fair_value_gap: FairValueGapConfig
     support_resistance: SupportResistanceConfig
     indicators: IndicatorConfig
     order_block: OrderBlockConfig
+    audit: StructureAuditConfig
 
 
 class ExecutionPricingConfig(StrictModel):

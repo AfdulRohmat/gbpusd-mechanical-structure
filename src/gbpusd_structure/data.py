@@ -35,6 +35,56 @@ REQUIRED_M5_COLUMNS = {
 }
 
 
+def canonical_m5_paths(data_root: Path, research: ResearchConfig) -> list[Path]:
+    """Resolve the complete ordered set of monthly files for the research range."""
+
+    expected_months = iter_months(
+        research.periods.research_start, research.periods.research_end
+    )
+    discovered = sorted(data_root.glob(research.data.canonical_m5_glob))
+    by_month = {
+        path.stem.removeprefix("m5-"): path
+        for path in discovered
+        if path.stem.startswith("m5-")
+    }
+    missing = sorted(set(expected_months).difference(by_month))
+    if missing:
+        raise ValueError("Missing canonical M5 month(s): " + ", ".join(missing))
+    return [by_month[month] for month in expected_months]
+
+
+def load_canonical_m5(data_root: Path, research: ResearchConfig) -> pd.DataFrame:
+    """Load, validate, and date-filter canonical M5 bars."""
+
+    frames = []
+    for path in canonical_m5_paths(data_root, research):
+        frame = pd.read_parquet(path)
+        missing_columns = sorted(REQUIRED_M5_COLUMNS.difference(frame.columns))
+        if missing_columns:
+            raise ValueError(
+                f"Canonical M5 schema error in {path.name}: "
+                + ", ".join(missing_columns)
+            )
+        frames.append(frame)
+    bars = pd.concat(frames, ignore_index=True)
+    bars["timestamp"] = pd.to_datetime(bars["timestamp"], utc=True)
+    start = pd.Timestamp(
+        datetime.combine(
+            research.periods.research_start, datetime.min.time(), tzinfo=UTC
+        )
+    )
+    end = pd.Timestamp(
+        datetime.combine(research.periods.research_end, datetime.min.time(), tzinfo=UTC)
+    )
+    bars = bars[bars["timestamp"].ge(start) & bars["timestamp"].lt(end)]
+    bars = bars.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    if bars.empty:
+        raise ValueError("Canonical M5 research range is empty")
+    if bars["timestamp"].duplicated().any():
+        raise ValueError("Canonical M5 range contains duplicate timestamps")
+    return bars
+
+
 def iter_months(start: date, end: date) -> tuple[str, ...]:
     if end <= start:
         raise ValueError("end must be later than start")

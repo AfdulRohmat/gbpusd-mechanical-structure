@@ -1,6 +1,6 @@
 # Technical Plan — Phase 0 Mechanical Definition Audit
 
-**Status:** Initial specification; no trading and no P&L
+**Status:** Baseline executed; see `PHASE0_RESULTS.md`; no trading and no P&L
 **Purpose:** establish causal labels before constructing a strategy
 
 ## 1. Objective

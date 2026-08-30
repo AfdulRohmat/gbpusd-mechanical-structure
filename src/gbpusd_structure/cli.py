@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from gbpusd_structure.config import load_project_config, resolve_data_root
 from gbpusd_structure.data import audit_canonical_m5
 from gbpusd_structure.paths import find_project_root
+from gbpusd_structure.phase0 import run_phase0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +38,15 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "audit-data",
         help="audit canonical M5 coverage, schema, and observed spread proxy",
+    )
+    phase0 = subparsers.add_parser(
+        "run-phase0",
+        help="run causal label and definition-sensitivity audit without P&L",
+    )
+    phase0.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="optional artifact parent; fingerprint is appended automatically",
     )
     return parser
 
@@ -76,4 +86,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         summary = audit_canonical_m5(root, config.research)
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0 if summary["valid"] else 1
+    if args.command == "run-phase0":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        artifact_root = args.artifact_root
+        if artifact_root is not None and not artifact_root.is_absolute():
+            artifact_root = project_root / artifact_root
+        try:
+            result = run_phase0(
+                project_root,
+                root,
+                artifact_root=artifact_root,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"Phase 0 failed: {exc}", file=sys.stderr)
+            return 1
+        output = {
+            "artifact_directory": str(result.artifact_directory),
+            "gate_passed": result.summary["gate"]["passed"],
+            "failed_gate_count": result.summary["gate"]["failed_count"],
+            "point_in_time_failures": result.summary["point_in_time_failures"],
+        }
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0 if result.summary["gate"]["passed"] else 1
     raise AssertionError(f"Unhandled command: {args.command}")
