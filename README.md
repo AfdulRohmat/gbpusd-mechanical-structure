@@ -190,6 +190,8 @@ before evaluating nested M5/M1 FVG pullback entries:
 
 ```bash
 .venv/bin/python -m gbpusd_structure build-phase1-5-m1 --year 2024
+.venv/bin/python -m gbpusd_structure run-phase1-5-coverage
+.venv/bin/python -m gbpusd_structure run-phase1-5-construction
 ```
 
 The entry and evidence-lock contract is in
