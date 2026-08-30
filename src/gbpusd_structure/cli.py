@@ -16,6 +16,7 @@ from gbpusd_structure.m1 import build_m1_year, load_m1_year, reconcile_m1_to_m5
 from gbpusd_structure.paths import find_project_root
 from gbpusd_structure.phase0 import run_phase0_2
 from gbpusd_structure.phase1 import run_phase1, run_phase1_1
+from gbpusd_structure.phase2 import run_phase2_directional_audit
 from gbpusd_structure.phase12 import (
     run_phase12_construction,
     run_phase12_coverage,
@@ -134,6 +135,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="run 2024 P&L for frozen FVG entry candidates",
     )
     phase15_construction.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="optional artifact parent; fingerprint is appended automatically",
+    )
+    phase2 = subparsers.add_parser(
+        "run-phase2-directional-audit",
+        help="run the preregistered 2024 gross directional primitive audit",
+    )
+    phase2.add_argument(
         "--artifact-root",
         type=Path,
         help="optional artifact parent; fingerprint is appended automatically",
@@ -446,4 +456,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(output, indent=2, sort_keys=True))
         return 0 if result.summary["replication_permitted"] else 1
+    if args.command == "run-phase2-directional-audit":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        artifact_root = args.artifact_root
+        if artifact_root is not None and not artifact_root.is_absolute():
+            artifact_root = project_root / artifact_root
+        try:
+            result = run_phase2_directional_audit(
+                project_root,
+                root,
+                artifact_root=artifact_root,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"Phase 2 directional audit failed: {exc}", file=sys.stderr)
+            return 1
+        output = {
+            "artifact_directory": str(result.artifact_directory),
+            "invariant_failure_count": result.summary["invariant_failure_count"],
+            "primary_event_counts": result.summary["primary_event_counts"],
+            "qualified_primitives": result.summary["qualified_primitives"],
+            "recommended_winner": result.summary["recommended_winner"],
+            "decision": result.summary["decision"],
+        }
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0 if result.summary["invariant_failure_count"] == 0 else 1
     raise AssertionError(f"Unhandled command: {args.command}")
