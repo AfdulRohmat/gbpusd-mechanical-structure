@@ -198,3 +198,16 @@ The entry and evidence-lock contract is in
 [`docs/TECHNICAL_PLAN_PHASE1_5.md`](docs/TECHNICAL_PLAN_PHASE1_5.md).
 Coverage and construction stopped without replication; results are recorded in
 [`docs/PHASE1_5_RESULTS.md`](docs/PHASE1_5_RESULTS.md).
+
+Phase 2 audits whether the underlying M15 BOS, CHoCH, liquidity-sweep, and
+displacement directions contain gross forward-return information before any
+entry, stop, target, or cost model is applied:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase2-directional-audit
+```
+
+The preregistered contract is in
+[`docs/TECHNICAL_PLAN_PHASE2.md`](docs/TECHNICAL_PLAN_PHASE2.md). No primitive
+qualified; the current mechanical structure-signal thesis is closed in
+[`docs/PHASE2_RESULTS.md`](docs/PHASE2_RESULTS.md).
