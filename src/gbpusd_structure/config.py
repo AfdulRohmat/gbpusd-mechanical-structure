@@ -1136,6 +1136,151 @@ class Phase15CoverageSelectionConfig(StrictModel):
         return self
 
 
+class Phase2ParentConfig(StrictModel):
+    branch: Literal["phase/01-5-fvg-pullback-entry"]
+    p3_signal_fingerprint: Literal["90d1e369b427d3d8"]
+    phase1_5_construction_fingerprint: Literal["80e415a3f056942d"]
+
+
+class Phase2ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    historical_replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    event_timeframe: Literal["15min"]
+    primary_sample: Literal["first_event_per_primitive_per_session"]
+    diagnostic_sample: Literal["all_events"]
+    returns_mode: Literal["gross_mid_price_directional_only"]
+    transaction_costs_applied: Literal[False]
+    historical_replication_access_allowed: Literal[False]
+
+
+class Phase2EventConfig(StrictModel):
+    primitives: tuple[
+        Literal["bos", "choch", "liquidity_sweep", "displacement"], ...
+    ]
+    bos_definition: Literal["existing_close_confirmed_continuation_break"]
+    choch_definition: Literal[
+        "existing_close_confirmed_protected_swing_break"
+    ]
+    liquidity_sweep_definition: Literal[
+        "wick_beyond_latest_confirmed_swing_then_close_back_inside"
+    ]
+    liquidity_sweep_minimum_excursion_atr: float = Field(gt=0)
+    liquidity_sweep_prediction: Literal["reversal"]
+    consume_swing_after_first_excursion: Literal[True]
+    ambiguous_two_sided_sweep_action: Literal["exclude"]
+    displacement_definition: Literal["completed_body_direction"]
+    displacement_minimum_body_atr: float = Field(gt=0)
+
+
+class Phase2OutcomeConfig(StrictModel):
+    entry_anchor: Literal["first_m5_mid_open_at_or_after_event_availability"]
+    exit_anchor: Literal["exact_horizon_m5_mid_open"]
+    forward_horizons_minutes: tuple[Literal[15, 30, 60, 120, 240], ...]
+    primary_horizon_minutes: Literal[60]
+    barrier_horizon_minutes: Literal[240]
+    barrier_atr: Literal[1.0]
+    same_bar_barrier_policy: Literal["ambiguous"]
+    require_exact_horizon_bar: Literal[True]
+    normalize_by: Literal["frozen_event_m15_atr"]
+
+
+Phase2BaselineRule = Literal[
+    "event_direction",
+    "seeded_random_direction",
+    "session_momentum",
+    "session_mean_reversion",
+    "four_bar_close_breakout",
+]
+
+
+class Phase2BaselineConfig(StrictModel):
+    rules: tuple[Phase2BaselineRule, ...]
+    random_seed: int = Field(ge=0)
+    random_null_resamples: int = Field(ge=100)
+    session_reference: Literal["session_open_mid"]
+    recent_breakout_lookback_m15_bars: int = Field(ge=2)
+    neutral_baseline_action: Literal["report_no_prediction"]
+
+
+class Phase2ReportingConfig(StrictModel):
+    scopes: tuple[
+        Literal[
+            "overall",
+            "session",
+            "direction",
+            "event_type",
+            "context_alignment",
+            "displacement_strength",
+        ],
+        ...,
+    ]
+    context_timeframes: tuple[Literal["1H", "4H"], ...]
+    displacement_strength_boundaries_atr: tuple[float, float]
+    cluster_bootstrap_unit: Literal["session_date"]
+    bootstrap_resamples: int = Field(ge=100)
+    confidence_level: float = Field(gt=0, lt=1)
+    minimum_scope_events: int = Field(ge=1)
+
+
+class Phase2DecisionGateConfig(StrictModel):
+    minimum_primary_events: int = Field(ge=1)
+    require_positive_primary_mean: Literal[True]
+    require_primary_cluster_ci_lower_above_zero: Literal[True]
+    require_above_random_null_upper: Literal[True]
+    require_favorable_first_rate_above_half: Literal[True]
+    require_positive_each_session: Literal[True]
+    require_positive_each_direction: Literal[True]
+    minimum_positive_horizons: int = Field(ge=1, le=5)
+    require_positive_paired_increment_vs_session_momentum: Literal[True]
+    require_positive_paired_increment_vs_session_mean_reversion: Literal[True]
+    no_qualified_primitive_action: Literal[
+        "close_current_structure_signal_thesis"
+    ]
+    qualified_primitive_action: Literal[
+        "freeze_one_winner_before_historical_replication"
+    ]
+
+
+class Phase2Config(StrictModel):
+    phase: Literal["phase2_directional_signal_edge_audit"]
+    status: Literal["preregistered_before_forward_returns"]
+    parent: Phase2ParentConfig
+    scope: Phase2ScopeConfig
+    events: Phase2EventConfig
+    outcomes: Phase2OutcomeConfig
+    baselines: Phase2BaselineConfig
+    reporting: Phase2ReportingConfig
+    decision_gate: Phase2DecisionGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase2Config:
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 2 sessions must remain frozen")
+        if self.events.primitives != (
+            "bos",
+            "choch",
+            "liquidity_sweep",
+            "displacement",
+        ):
+            raise ValueError("Phase 2 primitive order must remain frozen")
+        if self.outcomes.forward_horizons_minutes != (15, 30, 60, 120, 240):
+            raise ValueError("Phase 2 horizons must remain frozen")
+        expected_rules = (
+            "event_direction",
+            "seeded_random_direction",
+            "session_momentum",
+            "session_mean_reversion",
+            "four_bar_close_breakout",
+        )
+        if self.baselines.rules != expected_rules:
+            raise ValueError("Phase 2 baselines must remain frozen")
+        lower, upper = self.reporting.displacement_strength_boundaries_atr
+        if not 0 < lower < upper:
+            raise ValueError("Phase 2 displacement boundaries must increase")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -1150,6 +1295,7 @@ class ProjectConfig(StrictModel):
     phase1_4: Phase14Config
     phase1_5: Phase15Config
     phase1_5_coverage_selection: Phase15CoverageSelectionConfig
+    phase2: Phase2Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -1207,6 +1353,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
             Phase15CoverageSelectionConfig.model_validate(
                 _read_yaml(config_directory / "phase1_5_coverage_selection.yaml")
             )
+        ),
+        phase2=Phase2Config.model_validate(
+            _read_yaml(config_directory / "phase2.yaml")
         ),
     )
 

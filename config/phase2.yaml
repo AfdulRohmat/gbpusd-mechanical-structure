@@ -1,0 +1,77 @@
+phase: phase2_directional_signal_edge_audit
+status: preregistered_before_forward_returns
+
+parent:
+  branch: phase/01-5-fvg-pullback-entry
+  p3_signal_fingerprint: 90d1e369b427d3d8
+  phase1_5_construction_fingerprint: 80e415a3f056942d
+
+scope:
+  construction_year: 2024
+  historical_replication_year: 2025
+  sessions: [london, new_york]
+  event_timeframe: 15min
+  primary_sample: first_event_per_primitive_per_session
+  diagnostic_sample: all_events
+  returns_mode: gross_mid_price_directional_only
+  transaction_costs_applied: false
+  historical_replication_access_allowed: false
+
+events:
+  primitives: [bos, choch, liquidity_sweep, displacement]
+  bos_definition: existing_close_confirmed_continuation_break
+  choch_definition: existing_close_confirmed_protected_swing_break
+  liquidity_sweep_definition: wick_beyond_latest_confirmed_swing_then_close_back_inside
+  liquidity_sweep_minimum_excursion_atr: 0.05
+  liquidity_sweep_prediction: reversal
+  consume_swing_after_first_excursion: true
+  ambiguous_two_sided_sweep_action: exclude
+  displacement_definition: completed_body_direction
+  displacement_minimum_body_atr: 0.80
+
+outcomes:
+  entry_anchor: first_m5_mid_open_at_or_after_event_availability
+  exit_anchor: exact_horizon_m5_mid_open
+  forward_horizons_minutes: [15, 30, 60, 120, 240]
+  primary_horizon_minutes: 60
+  barrier_horizon_minutes: 240
+  barrier_atr: 1.0
+  same_bar_barrier_policy: ambiguous
+  require_exact_horizon_bar: true
+  normalize_by: frozen_event_m15_atr
+
+baselines:
+  rules:
+    - event_direction
+    - seeded_random_direction
+    - session_momentum
+    - session_mean_reversion
+    - four_bar_close_breakout
+  random_seed: 20260901
+  random_null_resamples: 10000
+  session_reference: session_open_mid
+  recent_breakout_lookback_m15_bars: 4
+  neutral_baseline_action: report_no_prediction
+
+reporting:
+  scopes: [overall, session, direction, event_type, context_alignment, displacement_strength]
+  context_timeframes: [1H, 4H]
+  displacement_strength_boundaries_atr: [0.80, 1.20]
+  cluster_bootstrap_unit: session_date
+  bootstrap_resamples: 10000
+  confidence_level: 0.95
+  minimum_scope_events: 30
+
+decision_gate:
+  minimum_primary_events: 120
+  require_positive_primary_mean: true
+  require_primary_cluster_ci_lower_above_zero: true
+  require_above_random_null_upper: true
+  require_favorable_first_rate_above_half: true
+  require_positive_each_session: true
+  require_positive_each_direction: true
+  minimum_positive_horizons: 4
+  require_positive_paired_increment_vs_session_momentum: true
+  require_positive_paired_increment_vs_session_mean_reversion: true
+  no_qualified_primitive_action: close_current_structure_signal_thesis
+  qualified_primitive_action: freeze_one_winner_before_historical_replication

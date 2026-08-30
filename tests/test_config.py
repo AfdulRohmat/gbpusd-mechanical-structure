@@ -90,6 +90,24 @@ def test_checked_in_configuration_is_valid() -> None:
         ("e1_m5_fvg_mitigation", 250),
         ("e2_m5_fvg_m1_refinement", 170),
     )
+    assert config.phase2.scope.construction_year == 2024
+    assert config.phase2.scope.historical_replication_access_allowed is False
+    assert config.phase2.events.primitives == (
+        "bos",
+        "choch",
+        "liquidity_sweep",
+        "displacement",
+    )
+    assert config.phase2.outcomes.forward_horizons_minutes == (
+        15,
+        30,
+        60,
+        120,
+        240,
+    )
+    assert config.phase2.outcomes.primary_horizon_minutes == 60
+    assert config.phase2.baselines.recent_breakout_lookback_m15_bars == 4
+    assert config.phase2.decision_gate.minimum_primary_events == 120
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 
