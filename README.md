@@ -25,16 +25,14 @@ future leakage.
 
 ## Current status
 
-Phase 1.1 has executed the revised full-session opportunity process. Setup-
-driven models now search from London open to New York open and from New York
-open to the FX-day cutoff, selecting the first candidate satisfying each
-model's complete rules.
+Phase 1.2 tested whether light causal filters could reduce full-session P3 from
+approximately 32 to 20–25 trades per month while improving quality. A staged
+lock screened coverage before P&L and allowed only displacement (F1) and a
+non-opposition H1+H4 veto (F4) into 2024 construction.
 
-No candidate advanced. Full-session P3 coverage increased from 323 to 768
-trades across both years but remained negative. Exact H1+H4 alignment produced
-49 P4 trades: 19 negative construction trades and 30 slightly positive
-replication trades whose confidence interval crossed zero. P5 produced only
-four trades.
+The frequency target was reached, but neither filter was positive. F1 produced
+275 trades at `-0.346R/trade`; F4 produced 288 at `-0.230R/trade`. No filter
+qualified for selection, so 2025 filter P&L remained unopened by design.
 
 - The Phase-1.1 run had zero point-in-time, session, parent, or execution
   invariant failures.
@@ -59,6 +57,9 @@ See:
 - `docs/PHASE1_RESULTS.md`
 - `docs/TECHNICAL_PLAN_PHASE1_1.md`
 - `docs/PHASE1_1_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_2.md`
+- `docs/PHASE1_2_COVERAGE_RESULTS.md`
+- `docs/PHASE1_2_RESULTS.md`
 
 ## Setup
 
@@ -146,3 +147,13 @@ Run the full-session Phase-1.1 revision:
 
 Its official evidence is under `artifacts/phase1_1/90d1e369b427d3d8/`. Phase 1
 remains preserved as the opening-window parent rather than being overwritten.
+
+Run the staged Phase-1.2 construction study:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-2-coverage
+.venv/bin/python -m gbpusd_structure run-phase1-2-construction
+```
+
+The construction command returns non-zero because no filter qualified for
+replication. No replication command or winner file exists for this run.
