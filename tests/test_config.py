@@ -71,6 +71,17 @@ def test_checked_in_configuration_is_valid() -> None:
         "p3_structure_target_2r",
     )
     assert config.phase1_4.risk.fixed_risk_usd == pytest.approx(30.0)
+    assert config.phase1_5.parent.structural_construction_fingerprint == (
+        "41fe02f5ef90868b"
+    )
+    assert config.phase1_5.fvg.minimum_size_atr == pytest.approx(0.1)
+    assert config.phase1_5.coverage_stage.minimum_evaluable_trades_per_year == 120
+    assert config.phase1_5.coverage_stage.desired_trades_per_year == (240, 300)
+    assert tuple(item.id for item in config.phase1_5.variants) == (
+        "e0_immediate_structure_2atr",
+        "e1_m5_fvg_mitigation",
+        "e2_m5_fvg_m1_refinement",
+    )
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

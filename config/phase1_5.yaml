@@ -1,0 +1,83 @@
+phase: phase1_5_fvg_pullback_entry
+status: preregistered_before_coverage
+
+parent:
+  branch: phase/01-4-structural-stop-ablation
+  signal_fingerprint: 90d1e369b427d3d8
+  structural_construction_fingerprint: 41fe02f5ef90868b
+  baseline_model: p3_structure_target_2atr
+
+scope:
+  construction_year: 2024
+  replication_year: 2025
+  sessions: [london, new_york]
+  one_trade_per_session: true
+  frozen_p3_signal: true
+  structural_mapping_required_at_entry: true
+
+m1_data:
+  source: histdata_tick_archives
+  source_timezone: Etc/GMT+5
+  raw_archive_glob: raw/histdata/GBPUSD/year/HISTDATA_COM_ASCII_GBPUSD_Tyearmonth.zip
+  output_glob: processed/m1_monthly/symbol=GBPUSD/year=year/m1-year-month.parquet
+  price_sides: [bid, ask, mid]
+  require_utc: true
+  require_unique_timestamp: true
+  require_m1_to_m5_reconciliation: true
+
+fvg:
+  geometry: three_candle_wick_gap
+  atr_period: 14
+  minimum_size_atr: 0.10
+  require_contiguous_bars: true
+  direction_must_match_signal: true
+  first_available_fvg_only: true
+  fvg_available_at_or_after_signal: true
+  mitigation_must_be_after_fvg_availability: true
+  m1_zone_must_overlap_parent_m5_zone: true
+
+destination:
+  stop: frozen_causal_structural_stop
+  target: frozen_parent_immediate_entry_plus_minus_2_signal_atr
+  target_does_not_move_with_pullback_entry: true
+  preentry_priority: [stop, target, mitigation]
+
+variants:
+  - id: e0_immediate_structure_2atr
+    entry: parent_immediate_m5_open
+    role: frozen_baseline
+  - id: e1_m5_fvg_mitigation
+    entry: next_m5_open_after_first_m5_fvg_mitigation
+    role: candidate
+  - id: e2_m5_fvg_m1_refinement
+    entry: next_m1_open_after_nested_directional_m1_fvg
+    role: candidate
+
+coverage_stage:
+  period: construction
+  returns_access_allowed: false
+  minimum_evaluable_trades_per_year: 120
+  desired_trades_per_year: [240, 300]
+  report_cancellation_reasons: true
+  no_eligible_candidate_action: stop_without_pnl
+
+execution:
+  observed_bid_ask: true
+  primary_slippage_pips_per_side: 0.10
+  stress_slippage_pips_per_side: 0.20
+  commission_pips_per_side: 0.35
+  intrabar_priority: stop_first
+  force_flat_at_session_cutoff: true
+  fixed_risk_usd: 30.0
+  lot_quantization_enabled: false
+
+construction_gate:
+  require_frozen_coverage_selection: true
+  require_zero_invariant_failures: true
+  require_positive_mean_trade_net_r: true
+  require_profit_factor_above_one: true
+  require_mean_opportunity_improvement_over_parent: true
+  maximum_replication_candidates: 1
+  winner_objective: highest_mean_opportunity_net_r
+  no_qualified_candidate_action: stop_without_replication
+

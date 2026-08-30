@@ -963,6 +963,143 @@ class Phase14Config(StrictModel):
         return self
 
 
+class Phase15ParentConfig(StrictModel):
+    branch: Literal["phase/01-4-structural-stop-ablation"]
+    signal_fingerprint: Literal["90d1e369b427d3d8"]
+    structural_construction_fingerprint: Literal["41fe02f5ef90868b"]
+    baseline_model: Literal["p3_structure_target_2atr"]
+
+
+class Phase15ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    one_trade_per_session: Literal[True]
+    frozen_p3_signal: Literal[True]
+    structural_mapping_required_at_entry: Literal[True]
+
+
+class Phase15M1DataConfig(StrictModel):
+    source: Literal["histdata_tick_archives"]
+    source_timezone: Literal["Etc/GMT+5"]
+    raw_archive_glob: str
+    output_glob: str
+    price_sides: tuple[Literal["bid", "ask", "mid"], ...]
+    require_utc: Literal[True]
+    require_unique_timestamp: Literal[True]
+    require_m1_to_m5_reconciliation: Literal[True]
+
+
+class Phase15FvgConfig(StrictModel):
+    geometry: Literal["three_candle_wick_gap"]
+    atr_period: Literal[14]
+    minimum_size_atr: Literal[0.1]
+    require_contiguous_bars: Literal[True]
+    direction_must_match_signal: Literal[True]
+    first_available_fvg_only: Literal[True]
+    fvg_available_at_or_after_signal: Literal[True]
+    mitigation_must_be_after_fvg_availability: Literal[True]
+    m1_zone_must_overlap_parent_m5_zone: Literal[True]
+
+
+class Phase15DestinationConfig(StrictModel):
+    stop: Literal["frozen_causal_structural_stop"]
+    target: Literal["frozen_parent_immediate_entry_plus_minus_2_signal_atr"]
+    target_does_not_move_with_pullback_entry: Literal[True]
+    preentry_priority: tuple[Literal["stop", "target", "mitigation"], ...]
+
+
+class Phase15VariantConfig(StrictModel):
+    id: Literal[
+        "e0_immediate_structure_2atr",
+        "e1_m5_fvg_mitigation",
+        "e2_m5_fvg_m1_refinement",
+    ]
+    entry: Literal[
+        "parent_immediate_m5_open",
+        "next_m5_open_after_first_m5_fvg_mitigation",
+        "next_m1_open_after_nested_directional_m1_fvg",
+    ]
+    role: Literal["frozen_baseline", "candidate"]
+
+
+class Phase15CoverageConfig(StrictModel):
+    period: Literal["construction"]
+    returns_access_allowed: Literal[False]
+    minimum_evaluable_trades_per_year: Literal[120]
+    desired_trades_per_year: tuple[Literal[240, 300], ...]
+    report_cancellation_reasons: Literal[True]
+    no_eligible_candidate_action: Literal["stop_without_pnl"]
+
+
+class Phase15ExecutionConfig(StrictModel):
+    observed_bid_ask: Literal[True]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    intrabar_priority: Literal["stop_first"]
+    force_flat_at_session_cutoff: Literal[True]
+    fixed_risk_usd: Literal[30.0]
+    lot_quantization_enabled: Literal[False]
+
+
+class Phase15ConstructionGateConfig(StrictModel):
+    require_frozen_coverage_selection: Literal[True]
+    require_zero_invariant_failures: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_mean_opportunity_improvement_over_parent: Literal[True]
+    maximum_replication_candidates: Literal[1]
+    winner_objective: Literal["highest_mean_opportunity_net_r"]
+    no_qualified_candidate_action: Literal["stop_without_replication"]
+
+
+class Phase15Config(StrictModel):
+    phase: Literal["phase1_5_fvg_pullback_entry"]
+    status: Literal["preregistered_before_coverage"]
+    parent: Phase15ParentConfig
+    scope: Phase15ScopeConfig
+    m1_data: Phase15M1DataConfig
+    fvg: Phase15FvgConfig
+    destination: Phase15DestinationConfig
+    variants: tuple[Phase15VariantConfig, ...]
+    coverage_stage: Phase15CoverageConfig
+    execution: Phase15ExecutionConfig
+    construction_gate: Phase15ConstructionGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase15Config:
+        expected = (
+            (
+                "e0_immediate_structure_2atr",
+                "parent_immediate_m5_open",
+                "frozen_baseline",
+            ),
+            (
+                "e1_m5_fvg_mitigation",
+                "next_m5_open_after_first_m5_fvg_mitigation",
+                "candidate",
+            ),
+            (
+                "e2_m5_fvg_m1_refinement",
+                "next_m1_open_after_nested_directional_m1_fvg",
+                "candidate",
+            ),
+        )
+        actual = tuple((item.id, item.entry, item.role) for item in self.variants)
+        if actual != expected:
+            raise ValueError("Phase 1.5 entry variants must remain frozen")
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1.5 sessions must remain frozen")
+        if self.destination.preentry_priority != ("stop", "target", "mitigation"):
+            raise ValueError("Phase 1.5 pre-entry priority must remain frozen")
+        if self.m1_data.price_sides != ("bid", "ask", "mid"):
+            raise ValueError("Phase 1.5 M1 price sides must remain frozen")
+        if self.coverage_stage.desired_trades_per_year != (240, 300):
+            raise ValueError("Phase 1.5 desired coverage must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -975,6 +1112,7 @@ class ProjectConfig(StrictModel):
     phase1_2_coverage_selection: Phase12CoverageSelectionConfig
     phase1_3: Phase13Config
     phase1_4: Phase14Config
+    phase1_5: Phase15Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -1024,6 +1162,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1_4=Phase14Config.model_validate(
             _read_yaml(config_directory / "phase1_4.yaml")
+        ),
+        phase1_5=Phase15Config.model_validate(
+            _read_yaml(config_directory / "phase1_5.yaml")
         ),
     )
 
