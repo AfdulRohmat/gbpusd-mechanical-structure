@@ -184,3 +184,13 @@ The staged contract is documented in
 [`docs/TECHNICAL_PLAN_PHASE1_4.md`](docs/TECHNICAL_PLAN_PHASE1_4.md).
 Construction stopped without replication; the evidence and mapping limitation
 are recorded in [`docs/PHASE1_4_RESULTS.md`](docs/PHASE1_4_RESULTS.md).
+
+Phase 1.5 builds causal M1 bars from the existing local HistData tick archives
+before evaluating nested M5/M1 FVG pullback entries:
+
+```bash
+.venv/bin/python -m gbpusd_structure build-phase1-5-m1 --year 2024
+```
+
+The entry and evidence-lock contract is in
+[`docs/TECHNICAL_PLAN_PHASE1_5.md`](docs/TECHNICAL_PLAN_PHASE1_5.md).

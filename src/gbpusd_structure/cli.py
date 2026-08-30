@@ -11,7 +11,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from gbpusd_structure.config import load_project_config, resolve_data_root
-from gbpusd_structure.data import audit_canonical_m5
+from gbpusd_structure.data import audit_canonical_m5, load_canonical_m5
+from gbpusd_structure.m1 import build_m1_year, load_m1_year, reconcile_m1_to_m5
 from gbpusd_structure.paths import find_project_root
 from gbpusd_structure.phase0 import run_phase0_2
 from gbpusd_structure.phase1 import run_phase1, run_phase1_1
@@ -109,6 +110,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="optional artifact parent; fingerprint is appended automatically",
     )
+    phase15_m1 = subparsers.add_parser(
+        "build-phase1-5-m1",
+        help="build and reconcile construction M1 bars from local tick archives",
+    )
+    phase15_m1.add_argument("--year", type=int, default=2024)
+    phase15_m1.add_argument("--force", action="store_true")
     return parser
 
 
@@ -336,4 +343,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(output, indent=2, sort_keys=True))
         return 0 if result.summary["replication_permitted"] else 1
+    if args.command == "build-phase1-5-m1":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        try:
+            summary = build_m1_year(root, config, args.year, force=args.force)
+            m1 = load_m1_year(root, config, args.year)
+            m5 = load_canonical_m5(root, config.research)
+            m5 = m5[m5["timestamp"].dt.year.eq(args.year)].reset_index(drop=True)
+            reconciliation = reconcile_m1_to_m5(m1, m5)
+        except (OSError, ValueError) as exc:
+            print(f"Phase 1.5 M1 build failed: {exc}", file=sys.stderr)
+            return 1
+        output = {
+            "audit_path": summary["audit_path"],
+            "year": args.year,
+            "month_count": summary["month_count"],
+            "m1_bar_count": len(m1),
+            "reconciliation": reconciliation,
+        }
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0 if reconciliation["valid"] else 1
     raise AssertionError(f"Unhandled command: {args.command}")
