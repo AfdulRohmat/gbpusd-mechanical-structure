@@ -3,6 +3,9 @@
 **Status:** Baseline executed; see `PHASE0_RESULTS.md`; no trading and no P&L
 **Purpose:** establish causal labels before constructing a strategy
 
+The failed baseline is preserved unchanged. Its preregistered semantic
+refinement is specified separately in `TECHNICAL_PLAN_PHASE0_1.md`.
+
 ## 1. Objective
 
 Phase 0 converts visual trading language into timestamped, testable objects. It

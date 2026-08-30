@@ -44,6 +44,7 @@ See:
 - `docs/TEMPORARY_EXECUTION_MODEL.md`
 - `docs/DATA_BASELINE_2024_2025.md`
 - `docs/PHASE0_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE0_1.md`
 
 ## Setup
 
