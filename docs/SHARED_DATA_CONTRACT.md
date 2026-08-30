@@ -22,7 +22,8 @@ research/
 │       ├── raw/
 │       │   └── exness/
 │       ├── processed/
-│       │   └── exness/m5_monthly/symbol=GBPUSD/year=YYYY/
+│       │   ├── m5_monthly/symbol=GBPUSD/year=YYYY/  # temporary HistData
+│       │   └── exness/m5_monthly/symbol=GBPUSD/year=YYYY/  # future
 │       ├── reference/
 │       │   └── fundamentals/
 │       └── manifests/
@@ -32,11 +33,13 @@ research/
 
 ## Canonical M5 requirements
 
-Monthly Parquet partitions use:
+Temporary monthly Parquet partitions use:
 
 ```text
-processed/exness/m5_monthly/symbol=GBPUSD/year=YYYY/m5-YYYY-MM.parquet
+processed/m5_monthly/symbol=GBPUSD/year=YYYY/m5-YYYY-MM.parquet
 ```
+
+Account-aligned Exness partitions will later use the `processed/exness/` prefix.
 
 Required columns:
 

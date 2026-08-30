@@ -37,6 +37,8 @@ class InstrumentConfig(StrictModel):
 class DataConfig(StrictModel):
     root_environment_variable: str
     local_fallback: Path
+    price_source: Literal["histdata_bid_ask", "exness_mt5_bid_ask"]
+    source_role: Literal["temporary_development_proxy", "broker_execution_feed"]
     canonical_m5_glob: str
     fundamental_directory: Path
     timezone: Literal["UTC"]
@@ -63,7 +65,7 @@ class EvidencePeriodsConfig(StrictModel):
             self.research_start
             < self.construction_end
             < self.replication_end
-            < self.research_end
+            == self.research_end
             < self.future_lockbox_start
         ):
             raise ValueError("research and lockbox boundaries must be increasing")
@@ -186,12 +188,27 @@ class SwingConfig(StrictModel):
     left_bars: int = Field(ge=1)
     right_bars: int = Field(ge=1)
     equal_price_tolerance_pips: float = Field(ge=0)
+    plateau_tie_break: Literal["rightmost"]
+    near_equal_handling: Literal["structural_relationship"]
+
+
+class VolatilityConfig(StrictModel):
+    atr_period: int = Field(ge=2)
+    method: Literal["simple_true_range_mean"]
 
 
 class BreakConfig(StrictModel):
     confirmation: Literal["close"]
     minimum_buffer_atr: float = Field(ge=0)
     displacement_minimum_body_atr: float = Field(gt=0)
+    regime_model: Literal["paired_swing_relationships"]
+    protected_swing_model: Literal["latest_confirmed_opposing_swing"]
+    choch_result_state: Literal["transition"]
+
+
+class StructureContextConfig(StrictModel):
+    daily_role: Literal["regime_only"]
+    daily_entry_trigger_enabled: Literal[False]
 
 
 class FairValueGapConfig(StrictModel):
@@ -222,17 +239,90 @@ class IndicatorConfig(StrictModel):
 
 
 class OrderBlockConfig(StrictModel):
-    enabled: Literal[False]
-    status: Literal["deferred_pending_operational_definition"]
+    enabled: Literal[True]
+    strategy_admitted: Literal[False]
+    status: Literal["phase0_2_failed_geometry_gate"]
+    source_timeframes: tuple[Literal["15min", "1H", "4H"], ...]
+    anchor_event_types: tuple[Literal["bos", "choch"], ...]
+    require_displacement: Literal[True]
+    candidate_rule: Literal["last_opposing_non_doji"]
+    candidate_lookback_bars: int = Field(ge=1)
+    zone_geometry: Literal["full_wick_range"]
+    maximum_age_bars: int = Field(ge=1)
+    invalidation: Literal["close_beyond_distal_boundary"]
+    duplicate_candidate_handling: Literal["first_activation_only"]
+    fvg_overlap_required: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_order_block_scope(self) -> OrderBlockConfig:
+        if self.source_timeframes != ("15min", "1H", "4H"):
+            raise ValueError("Order Block source timeframes must be M15, H1, H4")
+        if self.anchor_event_types != ("bos", "choch"):
+            raise ValueError("Order Block anchors must be BOS and CHoCH")
+        return self
+
+
+class StructureAuditConfig(StrictModel):
+    minimum_bar_coverage_ratio: float = Field(gt=0, le=1)
+    maximum_ambiguous_swing_fraction: float = Field(ge=0, lt=1)
+    minimum_sensitivity_event_agreement: float = Field(gt=0, le=1)
+    minimum_events_per_year: int = Field(ge=1)
+    minimum_order_block_anchor_coverage: float = Field(gt=0, le=1)
+    minimum_order_block_geometry_iou: float = Field(gt=0, le=1)
 
 
 class StructureConfig(StrictModel):
     swings: SwingConfig
+    volatility: VolatilityConfig
     breaks: BreakConfig
+    context: StructureContextConfig
     fair_value_gap: FairValueGapConfig
     support_resistance: SupportResistanceConfig
     indicators: IndicatorConfig
     order_block: OrderBlockConfig
+    audit: StructureAuditConfig
+
+
+class ExecutionPricingConfig(StrictModel):
+    mode: Literal["observed_bid_ask"]
+    source: Literal["histdata", "exness_mt5"]
+    broker_specific_spread_claim: Literal[False]
+    replacement_feed: Literal["exness_mt5_raw_spread"]
+
+
+class ExecutionCostsConfig(StrictModel):
+    commission_usd_per_lot_per_side: float = Field(ge=0)
+    usd_per_pip_per_standard_lot: float = Field(gt=0)
+    slippage_pips_per_side: float = Field(ge=0)
+    stress_slippage_pips_per_side: float = Field(ge=0)
+    swap_enabled: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_costs(self) -> ExecutionCostsConfig:
+        if self.stress_slippage_pips_per_side < self.slippage_pips_per_side:
+            raise ValueError("stress slippage must not be below primary slippage")
+        return self
+
+    @property
+    def commission_pips_per_side(self) -> float:
+        return (
+            self.commission_usd_per_lot_per_side
+            / self.usd_per_pip_per_standard_lot
+        )
+
+
+class ExecutionSimulationConfig(StrictModel):
+    intrabar_priority: Literal["stop_first"]
+    long_entry_quote: Literal["ask"]
+    long_exit_quote: Literal["bid"]
+    short_entry_quote: Literal["bid"]
+    short_exit_quote: Literal["ask"]
+
+
+class ExecutionConfig(StrictModel):
+    pricing: ExecutionPricingConfig
+    costs: ExecutionCostsConfig
+    simulation: ExecutionSimulationConfig
 
 
 class ProjectConfig(StrictModel):
@@ -240,6 +330,7 @@ class ProjectConfig(StrictModel):
     sessions: SessionsConfig
     fundamental: FundamentalConfig
     structure: StructureConfig
+    execution: ExecutionConfig
 
 
 def _read_yaml(path: Path) -> object:
@@ -268,6 +359,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         structure=StructureConfig.model_validate(
             _read_yaml(config_directory / "structure.yaml")
+        ),
+        execution=ExecutionConfig.model_validate(
+            _read_yaml(config_directory / "execution.yaml")
         ),
     )
 

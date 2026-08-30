@@ -18,11 +18,20 @@ def test_checked_in_configuration_is_valid() -> None:
 
     assert config.research.instrument.symbol == "GBPUSD"
     assert config.research.instrument.account_type == "Raw Spread"
+    assert config.research.data.price_source == "histdata_bid_ask"
     assert config.research.timeframes.context == ("1D", "4H", "1H")
     assert config.sessions.sessions["london"].timezone == "Europe/London"
     assert config.fundamental.usage.role == "context_filter"
     assert config.structure.swings.right_bars == 2
-    assert config.structure.order_block.enabled is False
+    assert config.structure.swings.near_equal_handling == "structural_relationship"
+    assert config.structure.breaks.choch_result_state == "transition"
+    assert config.structure.context.daily_entry_trigger_enabled is False
+    assert config.structure.order_block.enabled is True
+    assert config.structure.order_block.strategy_admitted is False
+    assert config.structure.order_block.candidate_lookback_bars == 6
+    assert config.structure.order_block.maximum_age_bars == 50
+    assert config.execution.pricing.broker_specific_spread_claim is False
+    assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 
 
 def test_local_data_root_is_default(monkeypatch: pytest.MonkeyPatch) -> None:

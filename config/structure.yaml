@@ -2,11 +2,24 @@ swings:
   left_bars: 2
   right_bars: 2
   equal_price_tolerance_pips: 1.0
+  plateau_tie_break: rightmost
+  near_equal_handling: structural_relationship
+
+volatility:
+  atr_period: 14
+  method: simple_true_range_mean
 
 breaks:
   confirmation: close
   minimum_buffer_atr: 0.05
   displacement_minimum_body_atr: 0.80
+  regime_model: paired_swing_relationships
+  protected_swing_model: latest_confirmed_opposing_swing
+  choch_result_state: transition
+
+context:
+  daily_role: regime_only
+  daily_entry_trigger_enabled: false
 
 fair_value_gap:
   geometry: three_candle_wick_gap
@@ -26,5 +39,24 @@ indicators:
   primary_signal_enabled: false
 
 order_block:
-  enabled: false
-  status: deferred_pending_operational_definition
+  enabled: true
+  strategy_admitted: false
+  status: phase0_2_failed_geometry_gate
+  source_timeframes: [15min, 1H, 4H]
+  anchor_event_types: [bos, choch]
+  require_displacement: true
+  candidate_rule: last_opposing_non_doji
+  candidate_lookback_bars: 6
+  zone_geometry: full_wick_range
+  maximum_age_bars: 50
+  invalidation: close_beyond_distal_boundary
+  duplicate_candidate_handling: first_activation_only
+  fvg_overlap_required: false
+
+audit:
+  minimum_bar_coverage_ratio: 0.95
+  maximum_ambiguous_swing_fraction: 0.05
+  minimum_sensitivity_event_agreement: 0.70
+  minimum_events_per_year: 30
+  minimum_order_block_anchor_coverage: 0.70
+  minimum_order_block_geometry_iou: 0.50

@@ -1,7 +1,10 @@
 # Technical Plan — Phase 0 Mechanical Definition Audit
 
-**Status:** Initial specification; no trading and no P&L
+**Status:** Baseline executed; see `PHASE0_RESULTS.md`; no trading and no P&L
 **Purpose:** establish causal labels before constructing a strategy
+
+The failed baseline is preserved unchanged. Its preregistered semantic
+refinement is specified separately in `TECHNICAL_PLAN_PHASE0_1.md`.
 
 ## 1. Objective
 
@@ -13,7 +16,8 @@ No entry, stop, target, win rate, or expectancy is generated in this phase.
 
 ## 2. Inputs
 
-- Canonical UTC GBPUSD M5 Bid/Ask bars.
+- Canonical UTC GBPUSD M5 Bid/Ask bars from the existing 2024–2025 HistData
+  dataset as a temporary development proxy.
 - FX-day boundary at 17:00 America/New_York.
 - Deterministically aggregated M15, H1, H4, and Daily bars.
 - Point-in-time fundamental event tables are validated for later phases but do
@@ -21,6 +25,12 @@ No entry, stop, target, win rate, or expectancy is generated in this phase.
 
 Higher timeframes must be built from the same canonical M5 dataset. Broker chart
 defaults are not assumed to share the required FX-day anchor.
+
+The observed HistData Bid/Ask spread is retained rather than overwritten by an
+invented constant Exness spread. It is a conservative execution proxy, not an
+account-specific quote history. Future trading phases add the frozen Exness Raw
+Spread commission and slippage from `config/execution.yaml`. Replacing the price
+feed later must not alter any Phase-0 structural definition.
 
 ## 3. Initial operational definitions
 

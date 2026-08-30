@@ -25,7 +25,14 @@ future leakage.
 
 ## Current status
 
-Phase 0 is active. It defines and validates labels; it does not trade.
+Phase 0.1 has been executed. It defines and validates labels; it does not trade.
+The refined swing and protected-structure state machine passed its registered
+gates with zero point-in-time failures. H1 S/R remains excluded because one
+sensitivity scored 69.69% against the frozen 70% requirement; H4 S/R passed.
+
+Phase 0.2 then audited a mechanical Order Block definition. Formation and
+lifecycle rules passed, but full-wick versus body geometry failed on M15, H1,
+and H4. Order Blocks remain diagnostic labels and are not admitted to Phase 1.
 
 - No strategy P&L has been inspected.
 - BOS, CHoCH, FVG, swing, and S/R definitions are initial operational
@@ -39,6 +46,13 @@ See:
 - `docs/PRD_GBPUSD_MECHANICAL_STRUCTURE.md`
 - `docs/TECHNICAL_PLAN_PHASE0.md`
 - `docs/SHARED_DATA_CONTRACT.md`
+- `docs/TEMPORARY_EXECUTION_MODEL.md`
+- `docs/DATA_BASELINE_2024_2025.md`
+- `docs/PHASE0_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE0_1.md`
+- `docs/PHASE0_1_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE0_2.md`
+- `docs/PHASE0_2_RESULTS.md`
 
 ## Setup
 
@@ -76,3 +90,34 @@ The source repository `gbpusd-auction-value-volume-research` remains the audit
 record for the earlier auction/value/volume hypotheses. This project imports
 data contracts and selected point-in-time infrastructure, not conclusions or
 strategy thresholds from that research.
+
+## Temporary execution source
+
+During Phase 0, the local `data/` path points to the existing 2024–2025 GBPUSD
+dataset from the auction/value/volume project. No market data is duplicated.
+
+- Price and structure use the existing HistData-derived M5 bars.
+- Execution uses their observed historical Bid/Ask spread as a conservative
+  proxy; it is not labeled as an Exness spread.
+- Raw Spread commission is modeled at USD 3.50/lot/side (`0.35` pip/side for
+  one standard GBPUSD lot).
+- Primary slippage is `0.10` pip/side, with `0.20` pip/side registered stress.
+- When account-aligned Exness MT5 data becomes available, only the data and
+  pricing adapter changes; the structure definitions remain frozen.
+
+Audit the linked dataset with:
+
+```bash
+.venv/bin/python -m gbpusd_structure audit-data
+```
+
+Run the current Phase-0.2 Order Block definition audit (no trades and no P&L):
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase0-2
+```
+
+The command writes fingerprinted, gitignored tables and reports below
+`artifacts/phase0_2/`. A non-zero exit status means at least one registered
+definition gate failed; it does not mean the command crashed. Inspect that
+run's `summary.json` for the exact failed scopes.
