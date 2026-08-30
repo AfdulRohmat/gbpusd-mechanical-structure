@@ -25,8 +25,8 @@ frozen result of the opening-window experiment.
   at the cutoff is not executable and is excluded.
 - There is no minimum remaining management time. A late valid setup may enter
   on the next available M5 open and is force-closed at the same frozen cutoff.
-- Each model still takes only the first valid setup and at most one trade per
-  session.
+- Each model independently takes its first candidate satisfying that model's
+  complete rules and at most one trade per session.
 
 The London and New York setup windows meet at New York open and do not overlap.
 
@@ -36,8 +36,14 @@ The window revision applies to setup-driven models:
 
 - P2: first causal H4 support/resistance breakout or rejection;
 - P3: first causal M15 BOS or CHoCH;
-- P4: the P3 signal when H1 and H4 states are both directionally aligned; and
-- P5: P4 with displacement and a same-bar same-direction M15 FVG.
+- P4: first M15 BOS/CHoCH whose direction is aligned with both H1 and H4; and
+- P5: first aligned M15 BOS/CHoCH with displacement and a same-bar,
+  same-direction M15 FVG.
+
+P4 does not stop searching merely because the P3-selected first event was not
+aligned. P5 likewise continues after a P4-qualified event without FVG. The
+candidate sets are nested, but each model's selected trade may occur at a later
+timestamp than its simpler parent's selected trade.
 
 P0 fitted session drift and P1 H4 momentum remain session-open baselines. Their
 signal and entry timestamps are intentionally unchanged.
@@ -55,7 +61,7 @@ All other Phase-1 definitions remain frozen:
 - London flat at New York open and New York flat at the FX-day boundary;
 - causal H4 zone lifecycle and 0.05 ATR breakout buffer;
 - M15 protected-swing BOS/CHoCH definitions;
-- exact H1 plus H4 alignment for P4;
+- exact H1 plus H4 alignment for every P4 candidate;
 - same-bar displacement and directional FVG for P5;
 - common session-day opportunity panel with no-trade return zero; and
 - day-cluster bootstrap and Phase-1 advancement thresholds.
@@ -70,7 +76,9 @@ triggers remain excluded.
 - Entry must be the first observed M5 open at or after `decision_at` and strictly
   before the cutoff.
 - A signal/trade belongs to exactly one session window.
-- P4 remains a direction-preserving subset of P3 and P5 a subset of P4.
+- Every P4 source event must exist in the full P3 candidate set and every P5
+  source event in the full P4 candidate set. Selected trade timestamps need not
+  equal the parent's first selected timestamp.
 - P0/P1 counts and decisions must remain identical to the parent run.
 
 Any invariant failure invalidates the run independently of returns.

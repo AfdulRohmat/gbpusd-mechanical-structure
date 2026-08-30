@@ -19,6 +19,7 @@ scope:
 opportunity:
   maximum_trades_per_model_session: 1
   setup_signal_window: full_session
+  setup_selection: first_candidate_satisfying_each_model
   require_session_open_m5_bar: true
   decision_must_be_before_cutoff: true
   minimum_minutes_remaining: 0
@@ -36,9 +37,9 @@ baselines:
   - id: p3_m15_structure
     signal: first_m15_bos_or_choch
   - id: p4_top_down_structure
-    signal: p3_aligned_with_h1_and_h4_context
+    signal: first_m15_structure_aligned_with_h1_and_h4_context
   - id: p5_top_down_structure_fvg
-    signal: p4_with_displacement_and_same_bar_directional_fvg
+    signal: first_aligned_structure_with_displacement_and_directional_fvg
 
 session_drift_fit:
   fit_period: construction
@@ -102,4 +103,3 @@ advancement_gate:
     p4_top_down_structure: p3_m15_structure
     p5_top_down_structure_fvg: p4_top_down_structure
   require_positive_incremental_replication_opportunity_mean: true
-
