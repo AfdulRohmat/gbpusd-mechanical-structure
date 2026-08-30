@@ -53,6 +53,15 @@ def test_checked_in_configuration_is_valid() -> None:
     assert tuple(
         item.id for item in config.phase1_2_coverage_selection.eligible_filters
     ) == ("f1_displacement", "f4_h1_h4_opposition_veto")
+    assert config.phase1_3.parent.fingerprint == "90d1e369b427d3d8"
+    assert config.phase1_3.parent.baseline_model == "p3_m15_structure"
+    assert config.phase1_3.thresholds.stop_atr_multiples == (
+        1.0,
+        1.25,
+        1.5,
+        2.0,
+    )
+    assert config.phase1_3.path_measurement.stop_disabled_during_measurement
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

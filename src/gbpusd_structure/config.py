@@ -761,6 +761,83 @@ class Phase12CoverageSelectionConfig(StrictModel):
         return self
 
 
+class Phase13ParentConfig(StrictModel):
+    branch: Literal["phase/01-1-full-session-setups"]
+    fingerprint: Literal["90d1e369b427d3d8"]
+    baseline_model: Literal["p3_m15_structure"]
+
+
+class Phase13ScopeConfig(StrictModel):
+    periods: tuple[Literal["construction", "replication"], ...]
+    years: tuple[Literal[2024, 2025], ...]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    signal_selection: Literal["frozen_parent_p3_signals"]
+    alter_signals: Literal[False]
+    strategy_pnl_selection: Literal[False]
+
+
+class Phase13PathMeasurementConfig(StrictModel):
+    timeframe: Literal["5min"]
+    start: Literal["observed_entry_bar"]
+    end: Literal["session_cutoff_exclusive"]
+    long_entry_quote: Literal["ask_open"]
+    long_path_quote: Literal["bid"]
+    short_entry_quote: Literal["bid_open"]
+    short_path_quote: Literal["ask"]
+    anchor: Literal["observed_entry_quote_before_slippage"]
+    stop_disabled_during_measurement: Literal[True]
+    commission_in_excursion: Literal[False]
+    slippage_in_excursion: Literal[False]
+    observed_spread_in_excursion: Literal[True]
+    same_bar_policy: Literal["ambiguous_stop_first"]
+    later_target_requires_later_m5_bar: Literal[True]
+
+
+class Phase13ThresholdConfig(StrictModel):
+    stop_atr_multiples: tuple[
+        Literal[1.0, 1.25, 1.5, 2.0], ...
+    ]
+    fixed_target_atr: Literal[2.0]
+    rr_preserving_target_multiple: Literal[2.0]
+
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> Phase13ThresholdConfig:
+        if self.stop_atr_multiples != (1.0, 1.25, 1.5, 2.0):
+            raise ValueError("Phase 1.3 stop thresholds must remain frozen")
+        return self
+
+
+class Phase13ReportingConfig(StrictModel):
+    scopes: tuple[Literal["overall", "session", "direction"], ...]
+    excursion_quantiles: tuple[Literal[0.25, 0.5, 0.75, 0.9], ...]
+    separate_periods: Literal[True]
+    report_fixed_target_paths: Literal[True]
+    report_rr_preserving_paths: Literal[True]
+    winner_selection: Literal["none"]
+
+
+class Phase13Config(StrictModel):
+    phase: Literal["phase1_3_stop_adequacy_audit"]
+    status: Literal["preregistered_before_path_audit"]
+    parent: Phase13ParentConfig
+    scope: Phase13ScopeConfig
+    path_measurement: Phase13PathMeasurementConfig
+    thresholds: Phase13ThresholdConfig
+    reporting: Phase13ReportingConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase13Config:
+        if self.scope.periods != ("construction", "replication"):
+            raise ValueError("Phase 1.3 periods must remain frozen")
+        if self.scope.years != (2024, 2025):
+            raise ValueError("Phase 1.3 years must remain frozen")
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1.3 sessions must remain frozen")
+        if self.reporting.scopes != ("overall", "session", "direction"):
+            raise ValueError("Phase 1.3 report scopes must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -771,6 +848,7 @@ class ProjectConfig(StrictModel):
     phase1_1: Phase11Config
     phase1_2: Phase12Config
     phase1_2_coverage_selection: Phase12CoverageSelectionConfig
+    phase1_3: Phase13Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -814,6 +892,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1_2_coverage_selection=Phase12CoverageSelectionConfig.model_validate(
             _read_yaml(config_directory / "phase1_2_coverage_selection.yaml")
+        ),
+        phase1_3=Phase13Config.model_validate(
+            _read_yaml(config_directory / "phase1_3.yaml")
         ),
     )
 

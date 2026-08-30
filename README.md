@@ -157,3 +157,14 @@ Run the staged Phase-1.2 construction study:
 
 The construction command returns non-zero because no filter qualified for
 replication. No replication command or winner file exists for this run.
+
+Phase 1.3 diagnoses whether P3's `1 ATR` stop is frequently touched before the
+same signal later reaches `+2 ATR`. It measures executable-side M5 MAE/MFE until
+the session cutoff and does not select a new stop or strategy:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-3
+```
+
+The frozen diagnostic contract is documented in
+[`docs/TECHNICAL_PLAN_PHASE1_3.md`](docs/TECHNICAL_PLAN_PHASE1_3.md).
