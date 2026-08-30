@@ -25,21 +25,22 @@ future leakage.
 
 ## Current status
 
-Phase 1 has been executed from a preregistered price-only specification. It
-tested session drift, H4 momentum, causal H4 S/R interactions, M15 BOS/CHoCH,
-exact H1+H4 structural alignment, and a displacement/FVG subset with observed
-Bid/Ask quotes and full explicit costs.
+Phase 1.1 has executed the revised full-session opportunity process. Setup-
+driven models now search from London open to New York open and from New York
+open to the FX-day cutoff, selecting the first candidate satisfying each
+model's complete rules.
 
-No candidate advanced. P0–P3 were negative in both construction and historical
-replication. Exact H1+H4 alignment reduced 323 M15 structural signals to nine;
-the six 2025 examples were positive but the three 2024 examples were all losses
-and the sample failed the frozen evidence gates. Adding same-bar displacement
-and FVG reduced the sample to zero.
+No candidate advanced. Full-session P3 coverage increased from 323 to 768
+trades across both years but remained negative. Exact H1+H4 alignment produced
+49 P4 trades: 19 negative construction trades and 30 slightly positive
+replication trades whose confidence interval crossed zero. P5 produced only
+four trades.
 
-- The Phase-1 run had zero point-in-time or execution invariant failures.
+- The Phase-1.1 run had zero point-in-time, session, parent, or execution
+  invariant failures.
 - H1 S/R remains excluded after its Phase-0.1 stability failure.
 - Order Blocks remain diagnostic only after the Phase-0.2 geometry failure and
-  were not used anywhere in Phase 1.
+  were not used anywhere in Phase 1 or Phase 1.1.
 - Fundamentals, EMA, and RSI remain untested incremental layers.
 
 See:
@@ -56,6 +57,8 @@ See:
 - `docs/PHASE0_2_RESULTS.md`
 - `docs/TECHNICAL_PLAN_PHASE1.md`
 - `docs/PHASE1_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_1.md`
+- `docs/PHASE1_1_RESULTS.md`
 
 ## Setup
 
@@ -134,3 +137,12 @@ Run the preregistered Phase-1 nested price baselines:
 The official run writes to `artifacts/phase1/daac4b3ee86ac545/`. The command
 returns non-zero when no advancement candidate passes; this is a research-gate
 result, not a simulator crash.
+
+Run the full-session Phase-1.1 revision:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-1
+```
+
+Its official evidence is under `artifacts/phase1_1/90d1e369b427d3d8/`. Phase 1
+remains preserved as the opening-window parent rather than being overwritten.
