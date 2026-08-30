@@ -47,6 +47,7 @@ See:
 - `docs/PHASE0_RESULTS.md`
 - `docs/TECHNICAL_PLAN_PHASE0_1.md`
 - `docs/PHASE0_1_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE0_2.md`
 
 ## Setup
 
