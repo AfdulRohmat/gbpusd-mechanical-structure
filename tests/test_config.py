@@ -82,6 +82,14 @@ def test_checked_in_configuration_is_valid() -> None:
         "e1_m5_fvg_mitigation",
         "e2_m5_fvg_m1_refinement",
     )
+    assert config.phase1_5_coverage_selection.returns_inspected is False
+    assert tuple(
+        (item.id, item.entry_count)
+        for item in config.phase1_5_coverage_selection.eligible_candidates
+    ) == (
+        ("e1_m5_fvg_mitigation", 250),
+        ("e2_m5_fvg_m1_refinement", 170),
+    )
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

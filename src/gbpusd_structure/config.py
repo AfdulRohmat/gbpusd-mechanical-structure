@@ -1100,6 +1100,42 @@ class Phase15Config(StrictModel):
         return self
 
 
+class Phase15CoverageCandidateSelection(StrictModel):
+    id: Literal["e1_m5_fvg_mitigation", "e2_m5_fvg_m1_refinement"]
+    entry_count: int = Field(ge=120)
+    mean_entries_per_month: float = Field(gt=0)
+    desired_coverage_met: bool
+
+
+class Phase15CoverageSelectionConfig(StrictModel):
+    phase: Literal["phase1_5_fvg_pullback_entry"]
+    stage: Literal["construction_coverage_only"]
+    status: Literal["frozen_before_construction_pnl"]
+    coverage_fingerprint: Literal["033953375cc05c79"]
+    parent_fingerprint: Literal["41fe02f5ef90868b"]
+    construction_year: Literal[2024]
+    returns_inspected: Literal[False]
+    minimum_evaluable_count: Literal[120]
+    desired_coverage_range: tuple[Literal[240, 300], ...]
+    eligible_candidates: tuple[Phase15CoverageCandidateSelection, ...]
+
+    @model_validator(mode="after")
+    def validate_frozen_selection(self) -> Phase15CoverageSelectionConfig:
+        actual = tuple(
+            (item.id, item.entry_count, item.desired_coverage_met)
+            for item in self.eligible_candidates
+        )
+        expected = (
+            ("e1_m5_fvg_mitigation", 250, True),
+            ("e2_m5_fvg_m1_refinement", 170, False),
+        )
+        if actual != expected:
+            raise ValueError("Phase 1.5 frozen coverage selection changed")
+        if self.desired_coverage_range != (240, 300):
+            raise ValueError("Phase 1.5 frozen desired coverage changed")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -1113,6 +1149,7 @@ class ProjectConfig(StrictModel):
     phase1_3: Phase13Config
     phase1_4: Phase14Config
     phase1_5: Phase15Config
+    phase1_5_coverage_selection: Phase15CoverageSelectionConfig
 
 
 def _read_yaml(path: Path) -> object:
@@ -1165,6 +1202,11 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1_5=Phase15Config.model_validate(
             _read_yaml(config_directory / "phase1_5.yaml")
+        ),
+        phase1_5_coverage_selection=(
+            Phase15CoverageSelectionConfig.model_validate(
+                _read_yaml(config_directory / "phase1_5_coverage_selection.yaml")
+            )
         ),
     )
 

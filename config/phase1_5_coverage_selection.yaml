@@ -1,0 +1,19 @@
+phase: phase1_5_fvg_pullback_entry
+stage: construction_coverage_only
+status: frozen_before_construction_pnl
+coverage_fingerprint: 033953375cc05c79
+parent_fingerprint: 41fe02f5ef90868b
+construction_year: 2024
+returns_inspected: false
+minimum_evaluable_count: 120
+desired_coverage_range: [240, 300]
+eligible_candidates:
+  - id: e1_m5_fvg_mitigation
+    entry_count: 250
+    mean_entries_per_month: 20.833333333333332
+    desired_coverage_met: true
+  - id: e2_m5_fvg_m1_refinement
+    entry_count: 170
+    mean_entries_per_month: 14.166666666666666
+    desired_coverage_met: false
+
