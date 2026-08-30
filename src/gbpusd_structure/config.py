@@ -570,6 +570,158 @@ class Phase11Config(StrictModel):
         return self
 
 
+Phase12FilterId = Literal[
+    "f1_displacement",
+    "f2_h1_opposition_veto",
+    "f3_h4_opposition_veto",
+    "f4_h1_h4_opposition_veto",
+    "f5_displacement_h4_veto",
+    "f6_displacement_h1_h4_veto",
+]
+Phase12Rule = Literal[
+    "displacement",
+    "h1_opposition_veto",
+    "h4_opposition_veto",
+]
+
+
+class Phase12ParentConfig(StrictModel):
+    branch: Literal["phase/01-1-full-session-setups"]
+    fingerprint: Literal["90d1e369b427d3d8"]
+
+
+class Phase12ScopeConfig(StrictModel):
+    baseline_model: Literal["p3_m15_structure"]
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    excluded_posthoc_filters: tuple[
+        Literal["session", "event_type", "local_hour"], ...
+    ]
+    excluded_features: tuple[
+        Literal[
+            "order_block",
+            "h1_support_resistance",
+            "fundamental_bias",
+            "ema",
+            "rsi",
+            "fvg",
+        ],
+        ...,
+    ]
+
+
+class Phase12CandidateConfig(StrictModel):
+    id: Phase12FilterId
+    rules: tuple[Phase12Rule, ...]
+
+
+class Phase12CoverageConfig(StrictModel):
+    returns_access_allowed: Literal[False]
+    period: Literal["construction"]
+    target_trades_per_month_minimum: Literal[20]
+    target_trades_per_month_maximum: Literal[25]
+    target_trades_per_year_minimum: Literal[240]
+    target_trades_per_year_maximum: Literal[300]
+    selection: Literal["first_candidate_satisfying_filter_per_session"]
+    candidates: tuple[Phase12CandidateConfig, ...]
+
+    @model_validator(mode="after")
+    def validate_candidates(self) -> Phase12CoverageConfig:
+        expected = {
+            "f1_displacement": ("displacement",),
+            "f2_h1_opposition_veto": ("h1_opposition_veto",),
+            "f3_h4_opposition_veto": ("h4_opposition_veto",),
+            "f4_h1_h4_opposition_veto": (
+                "h1_opposition_veto",
+                "h4_opposition_veto",
+            ),
+            "f5_displacement_h4_veto": (
+                "displacement",
+                "h4_opposition_veto",
+            ),
+            "f6_displacement_h1_h4_veto": (
+                "displacement",
+                "h1_opposition_veto",
+                "h4_opposition_veto",
+            ),
+        }
+        actual = {item.id: item.rules for item in self.candidates}
+        if actual != expected:
+            raise ValueError("Phase 1.2 light-filter definitions must remain frozen")
+        return self
+
+
+class Phase12DisplacementConfig(StrictModel):
+    source_field: Literal["displacement_qualified"]
+    required_value: Literal[True]
+    frozen_minimum_body_atr: Literal[0.8]
+
+
+class Phase12VetoConfig(StrictModel):
+    timeframe: Literal["1H", "4H"]
+    long_rejected_state: Literal["bearish"]
+    short_rejected_state: Literal["bullish"]
+    allowed_states: tuple[
+        Literal["aligned", "transition", "balance", "undetermined"], ...
+    ]
+
+
+class Phase12FilterDefinitionsConfig(StrictModel):
+    displacement: Phase12DisplacementConfig
+    h1_opposition_veto: Phase12VetoConfig
+    h4_opposition_veto: Phase12VetoConfig
+
+
+class Phase12ConstructionSelectionConfig(StrictModel):
+    pnl_access_scope: Literal["construction_eligible_filters_only"]
+    baseline_comparison: Literal["p3_m15_structure"]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_mean_opportunity_improvement_over_p3: Literal[True]
+    winner_objective: Literal["highest_mean_opportunity_net_r"]
+    tie_break_order: tuple[Phase12FilterId, ...]
+    maximum_replication_candidates: Literal[1]
+    no_qualified_winner_action: Literal["stop_without_replication"]
+
+
+class Phase12ExecutionConfig(StrictModel):
+    inherit_from_phase1_1: Literal[True]
+    stop_atr: Literal[1.0]
+    target_r: Literal[2.0]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    force_flat_at_session_cutoff: Literal[True]
+
+
+class Phase12ReplicationGateConfig(StrictModel):
+    require_frozen_selection_file: Literal[True]
+    required_trade_count_minimum: Literal[240]
+    required_trade_count_maximum: Literal[300]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_mean_opportunity_net_r: Literal[True]
+    require_mean_opportunity_improvement_over_p3: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_positive_stress_expectancy: Literal[True]
+    require_opportunity_mean_ci_above_zero: Literal[True]
+    maximum_best_month_share_of_positive_r: Literal[0.5]
+
+
+class Phase12Config(StrictModel):
+    phase: Literal["phase1_2_light_filter_ablation"]
+    status: Literal["preregistered_before_coverage"]
+    parent: Phase12ParentConfig
+    scope: Phase12ScopeConfig
+    coverage_screen: Phase12CoverageConfig
+    filter_definitions: Phase12FilterDefinitionsConfig
+    construction_selection: Phase12ConstructionSelectionConfig
+    execution: Phase12ExecutionConfig
+    replication_gate: Phase12ReplicationGateConfig
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -578,6 +730,7 @@ class ProjectConfig(StrictModel):
     execution: ExecutionConfig
     phase1: Phase1Config
     phase1_1: Phase11Config
+    phase1_2: Phase12Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -615,6 +768,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1_1=Phase11Config.model_validate(
             _read_yaml(config_directory / "phase1_1.yaml")
+        ),
+        phase1_2=Phase12Config.model_validate(
+            _read_yaml(config_directory / "phase1_2.yaml")
         ),
     )
 

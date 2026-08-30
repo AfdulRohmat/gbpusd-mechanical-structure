@@ -45,6 +45,10 @@ def test_checked_in_configuration_is_valid() -> None:
     )
     assert config.phase1_1.opportunity.minimum_minutes_remaining == 0
     assert config.phase1_1.parent.fingerprint == "daac4b3ee86ac545"
+    assert config.phase1_2.parent.fingerprint == "90d1e369b427d3d8"
+    assert config.phase1_2.coverage_screen.returns_access_allowed is False
+    assert config.phase1_2.coverage_screen.target_trades_per_year_minimum == 240
+    assert config.phase1_2.coverage_screen.target_trades_per_year_maximum == 300
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 
