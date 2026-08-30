@@ -196,3 +196,5 @@ before evaluating nested M5/M1 FVG pullback entries:
 
 The entry and evidence-lock contract is in
 [`docs/TECHNICAL_PLAN_PHASE1_5.md`](docs/TECHNICAL_PLAN_PHASE1_5.md).
+Coverage and construction stopped without replication; results are recorded in
+[`docs/PHASE1_5_RESULTS.md`](docs/PHASE1_5_RESULTS.md).
