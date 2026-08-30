@@ -38,6 +38,13 @@ def test_checked_in_configuration_is_valid() -> None:
     )
     assert config.phase1.risk.stop_atr == pytest.approx(1.0)
     assert config.phase1.risk.target_r == pytest.approx(2.0)
+    assert config.phase1_1.opportunity.setup_signal_window == "full_session"
+    assert (
+        config.phase1_1.opportunity.setup_selection
+        == "first_candidate_satisfying_each_model"
+    )
+    assert config.phase1_1.opportunity.minimum_minutes_remaining == 0
+    assert config.phase1_1.parent.fingerprint == "daac4b3ee86ac545"
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

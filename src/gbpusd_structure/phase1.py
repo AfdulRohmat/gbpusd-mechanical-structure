@@ -104,6 +104,17 @@ def build_session_opportunities(
     ).reset_index(drop=True)
 
 
+def build_full_session_opportunities(
+    m5: pd.DataFrame,
+    config: ProjectConfig,
+) -> pd.DataFrame:
+    """Use the complete registered session as the setup observation window."""
+
+    opportunities = build_session_opportunities(m5, config)
+    opportunities["observation_end_at"] = opportunities["cutoff_at"]
+    return opportunities
+
+
 def _latest_position(times: pd.Series, at: pd.Timestamp) -> int | None:
     values = pd.to_datetime(times, utc=True).astype("int64").to_numpy()
     position = int(np.searchsorted(values, at.value, side="right") - 1)
@@ -225,35 +236,87 @@ def _m15_structure_signals(
     opportunities: pd.DataFrame,
     events: pd.DataFrame,
 ) -> pd.DataFrame:
+    candidates = _m15_structure_candidates(
+        opportunities,
+        events,
+        decision_must_be_before_end=False,
+    )
+    return _select_first_structure_signal(
+        candidates,
+        model_id="p3_m15_structure",
+        signal_type="m15_structure",
+    )
+
+
+def _m15_structure_candidates(
+    opportunities: pd.DataFrame,
+    events: pd.DataFrame,
+    *,
+    decision_must_be_before_end: bool,
+) -> pd.DataFrame:
     eligible = events[events["event_type"].isin(["bos", "choch"])].sort_values(
         ["available_at", "event_id"], kind="stable"
     )
     records = []
     for opportunity in opportunities.to_dict("records"):
-        candidates = eligible[
-            eligible["event_at"].ge(opportunity["session_open_at"])
-            & eligible["available_at"].le(opportunity["observation_end_at"])
-        ]
-        if candidates.empty:
-            continue
-        event = candidates.iloc[0]
-        direction = "long" if event["direction"] == "up" else "short"
-        records.append(
-            _signal_record(
-                opportunity,
-                model_id="p3_m15_structure",
-                decision_at=event["available_at"],
-                direction=direction,
-                signal_type="m15_structure",
-                atr=float(event["atr"]),
-                event_type=str(event["event_type"]),
-                signal_bar_id=str(event["bar_id"]),
-                setup_bar_at=event["event_at"],
-                feature_available_at=event["available_at"],
-                displacement_qualified=bool(event["displacement_qualified"]),
+        in_window = eligible["event_at"].ge(opportunity["session_open_at"])
+        if decision_must_be_before_end:
+            in_window &= eligible["available_at"].lt(
+                opportunity["observation_end_at"]
             )
-        )
+        else:
+            in_window &= eligible["available_at"].le(
+                opportunity["observation_end_at"]
+            )
+        for event in eligible[in_window].to_dict("records"):
+            direction = "long" if event["direction"] == "up" else "short"
+            record = _signal_record(
+                    opportunity,
+                    model_id="p3_m15_structure",
+                    decision_at=event["available_at"],
+                    direction=direction,
+                    signal_type="m15_structure_candidate",
+                    atr=float(event["atr"]),
+                    event_type=str(event["event_type"]),
+                    signal_bar_id=str(event["bar_id"]),
+                    setup_bar_at=event["event_at"],
+                    feature_available_at=event["available_at"],
+                    displacement_qualified=bool(event["displacement_qualified"]),
+                )
+            record["source_event_id"] = str(event["event_id"])
+            record["signal_id"] = (
+                f"candidate:p3:{opportunity['opportunity_id']}:"
+                f"{event['event_id']}"
+            )
+            records.append(record)
     return pd.DataFrame.from_records(records)
+
+
+def _select_first_structure_signal(
+    candidates: pd.DataFrame,
+    *,
+    model_id: str,
+    signal_type: str,
+) -> pd.DataFrame:
+    if candidates.empty:
+        output = candidates.copy()
+        output["model_id"] = model_id
+        output["signal_type"] = signal_type
+        return output
+    selected = (
+        candidates.sort_values(
+            ["decision_at", "source_event_id"], kind="stable"
+        )
+        .groupby("opportunity_id", sort=False, as_index=False)
+        .head(1)
+        .copy()
+    )
+    selected["model_id"] = model_id
+    selected["signal_type"] = signal_type
+    selected["signal_id"] = selected["opportunity_id"].map(
+        lambda value: f"signal:{model_id}:{value}"
+    )
+    return selected.reset_index(drop=True)
 
 
 def _h4_sr_signals(
@@ -262,16 +325,24 @@ def _h4_sr_signals(
     h4: pd.DataFrame,
     zone_snapshots: pd.DataFrame,
     config: ProjectConfig,
+    *,
+    decision_must_be_before_end: bool = False,
 ) -> pd.DataFrame:
     bars = m15.sort_values("timestamp", kind="stable").copy()
     bars["previous_mid_close"] = bars["mid_close"].shift(1)
     bars["previous_available_at"] = bars["available_at"].shift(1)
     candidate_bars: list[dict[str, Any]] = []
     for opportunity in opportunities.to_dict("records"):
-        selected = bars[
-            bars["timestamp"].ge(opportunity["session_open_at"])
-            & bars["available_at"].le(opportunity["observation_end_at"])
-        ]
+        in_window = bars["timestamp"].ge(opportunity["session_open_at"])
+        if decision_must_be_before_end:
+            in_window &= bars["available_at"].lt(
+                opportunity["observation_end_at"]
+            )
+        else:
+            in_window &= bars["available_at"].le(
+                opportunity["observation_end_at"]
+            )
+        selected = bars[in_window]
         for row in selected.to_dict("records"):
             candidate_bars.append({**row, "_opportunity": opportunity})
     candidate_bars.sort(key=lambda row: (row["timestamp"], row["bar_id"]))
@@ -456,6 +527,88 @@ def _top_down_signals(
     )
     with_fvg["signal_type"] = "top_down_structure_displacement_fvg"
     return aligned, with_fvg
+
+
+def _full_session_structure_signals(
+    opportunities: pd.DataFrame,
+    events: pd.DataFrame,
+    contexts: dict[str, pd.DataFrame],
+    fvg: pd.DataFrame,
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+    candidates = _m15_structure_candidates(
+        opportunities,
+        events,
+        decision_must_be_before_end=True,
+    )
+    candidates = _attach_contexts(candidates, contexts)
+    p3 = _select_first_structure_signal(
+        candidates,
+        model_id="p3_m15_structure",
+        signal_type="first_full_session_m15_structure",
+    )
+
+    desired = candidates["direction"].map(
+        {"long": "bullish", "short": "bearish"}
+    )
+    aligned_candidates = candidates[
+        candidates["h1_context"].eq(desired)
+        & candidates["h4_context"].eq(desired)
+    ].copy()
+    p4 = _select_first_structure_signal(
+        aligned_candidates,
+        model_id="p4_top_down_structure",
+        signal_type="first_full_session_top_down_structure",
+    )
+    p4["parent_candidate_id"] = p4["source_event_id"].map(
+        lambda value: f"candidate:p3:{value}"
+    )
+
+    fvg_keys = set(
+        fvg[["bar_id", "direction"]]
+        .assign(
+            direction=lambda frame: frame["direction"].map(
+                {"up": "long", "down": "short"}
+            )
+        )
+        [["bar_id", "direction"]]
+        .itertuples(index=False, name=None)
+    )
+    fvg_mask = [
+        bool(row["displacement_qualified"])
+        and (row["signal_bar_id"], row["direction"]) in fvg_keys
+        for row in aligned_candidates.to_dict("records")
+    ]
+    fvg_candidates = aligned_candidates[np.asarray(fvg_mask, dtype=bool)].copy()
+    p5 = _select_first_structure_signal(
+        fvg_candidates,
+        model_id="p5_top_down_structure_fvg",
+        signal_type="first_full_session_top_down_displacement_fvg",
+    )
+    p5["parent_candidate_id"] = p5["source_event_id"].map(
+        lambda value: f"candidate:p4:{value}"
+    )
+    return p3, p4, p5, candidates, aligned_candidates, fvg_candidates
+
+
+def _attach_local_decision_hour(
+    signals: pd.DataFrame,
+    config: ProjectConfig,
+) -> pd.DataFrame:
+    output = signals.copy()
+    hours = []
+    for row in output.to_dict("records"):
+        timezone = config.sessions.sessions[row["session"]].timezone
+        local = pd.Timestamp(row["decision_at"]).tz_convert(timezone)
+        hours.append(f"{local.hour:02d}:00")
+    output["decision_local_hour"] = hours
+    return output
 
 
 def _simulate_trade(
@@ -835,6 +988,8 @@ def _cluster_bootstrap(
 def _invariant_failures(
     signals: pd.DataFrame,
     trades: pd.DataFrame,
+    *,
+    require_selected_parent_subset: bool = True,
 ) -> list[dict[str, Any]]:
     failures: list[dict[str, Any]] = []
 
@@ -860,25 +1015,29 @@ def _invariant_failures(
     check("exit_by_cutoff", trades["exit_at"].gt(trades["cutoff_at"]))
     duplicates = trades.duplicated(["model_id", "opportunity_id"], keep=False)
     check("one_trade_per_model_session", duplicates)
-    for child, parent in (
-        ("p4_top_down_structure", "p3_m15_structure"),
-        ("p5_top_down_structure_fvg", "p4_top_down_structure"),
-    ):
-        child_keys = set(
-            signals[signals["model_id"].eq(child)][
-                ["opportunity_id", "direction"]
-            ].itertuples(index=False, name=None)
-        )
-        parent_keys = set(
-            signals[signals["model_id"].eq(parent)][
-                ["opportunity_id", "direction"]
-            ].itertuples(index=False, name=None)
-        )
-        missing = len(child_keys.difference(parent_keys))
-        if missing:
-            failures.append(
-                {"invariant": f"{child}_subset_of_{parent}", "failure_count": missing}
+    if require_selected_parent_subset:
+        for child, parent in (
+            ("p4_top_down_structure", "p3_m15_structure"),
+            ("p5_top_down_structure_fvg", "p4_top_down_structure"),
+        ):
+            child_keys = set(
+                signals[signals["model_id"].eq(child)][
+                    ["opportunity_id", "direction"]
+                ].itertuples(index=False, name=None)
             )
+            parent_keys = set(
+                signals[signals["model_id"].eq(parent)][
+                    ["opportunity_id", "direction"]
+                ].itertuples(index=False, name=None)
+            )
+            missing = len(child_keys.difference(parent_keys))
+            if missing:
+                failures.append(
+                    {
+                        "invariant": f"{child}_subset_of_{parent}",
+                        "failure_count": missing,
+                    }
+                )
     forbidden = [
         column
         for column in signals.columns
@@ -1012,6 +1171,104 @@ def _json_default(value: Any) -> Any:
     if pd.isna(value):
         return None
     raise TypeError(f"Not JSON serializable: {type(value)!r}")
+
+
+def _validate_phase11_shared_settings(config: ProjectConfig) -> None:
+    original = config.phase1
+    revision = config.phase1_1
+    pairs = (
+        (original.scope, revision.scope),
+        (original.session_drift_fit, revision.session_drift_fit),
+        (original.support_resistance_signal, revision.support_resistance_signal),
+        (original.structure_signal, revision.structure_signal),
+        (original.risk, revision.risk),
+        (original.statistics, revision.statistics),
+        (original.advancement_gate, revision.advancement_gate),
+    )
+    if any(left != right for left, right in pairs):
+        raise ValueError(
+            "Phase 1.1 may change only the setup window and per-model selection"
+        )
+    original_ids = tuple(item.id for item in original.baselines)
+    revision_ids = tuple(item.id for item in revision.baselines)
+    if original_ids != revision_ids:
+        raise ValueError("Phase 1.1 model IDs must match Phase 1")
+
+
+def _selected_signal_keys(frame: pd.DataFrame, model_id: str) -> set[tuple[Any, ...]]:
+    scoped = frame[frame["model_id"].eq(model_id)]
+    return set(
+        scoped[
+            ["opportunity_id", "direction", "decision_at"]
+        ].itertuples(index=False, name=None)
+    )
+
+
+def _phase11_invariant_failures(
+    signals: pd.DataFrame,
+    trades: pd.DataFrame,
+    structure_candidates: pd.DataFrame,
+    aligned_candidates: pd.DataFrame,
+    fvg_candidates: pd.DataFrame,
+    parent_signals: pd.DataFrame,
+) -> list[dict[str, Any]]:
+    failures = _invariant_failures(
+        signals,
+        trades,
+        require_selected_parent_subset=False,
+    )
+
+    def add(name: str, count: int) -> None:
+        if count:
+            failures.append({"invariant": name, "failure_count": int(count)})
+
+    setup_models = {
+        "p2_h4_sr",
+        "p3_m15_structure",
+        "p4_top_down_structure",
+        "p5_top_down_structure_fvg",
+    }
+    setup_signals = signals[signals["model_id"].isin(setup_models)]
+    add(
+        "full_session_decision_strictly_before_cutoff",
+        int(setup_signals["decision_at"].ge(setup_signals["cutoff_at"]).sum()),
+    )
+    add(
+        "setup_not_before_session",
+        int(setup_signals["setup_bar_at"].lt(setup_signals["session_open_at"]).sum()),
+    )
+    add(
+        "setup_precedes_decision",
+        int(setup_signals["setup_bar_at"].ge(setup_signals["decision_at"]).sum()),
+    )
+
+    candidate_ids = set(structure_candidates["source_event_id"])
+    aligned_ids = set(aligned_candidates["source_event_id"])
+    fvg_ids = set(fvg_candidates["source_event_id"])
+    selected_p3 = set(
+        signals[signals["model_id"].eq("p3_m15_structure")]["source_event_id"]
+    )
+    selected_p4 = set(
+        signals[signals["model_id"].eq("p4_top_down_structure")][
+            "source_event_id"
+        ]
+    )
+    selected_p5 = set(
+        signals[signals["model_id"].eq("p5_top_down_structure_fvg")][
+            "source_event_id"
+        ]
+    )
+    add("p3_selected_from_structure_candidates", len(selected_p3 - candidate_ids))
+    add("p4_selected_from_aligned_candidates", len(selected_p4 - aligned_ids))
+    add("p5_selected_from_fvg_candidates", len(selected_p5 - fvg_ids))
+    add("aligned_candidates_subset", len(aligned_ids - candidate_ids))
+    add("fvg_candidates_subset", len(fvg_ids - aligned_ids))
+
+    for model_id in ("p0_session_drift", "p1_h4_momentum"):
+        current = _selected_signal_keys(signals, model_id)
+        parent = _selected_signal_keys(parent_signals, model_id)
+        add(f"{model_id}_identical_to_parent", len(current ^ parent))
+    return failures
 
 
 def run_phase1(
@@ -1155,6 +1412,259 @@ def run_phase1(
         "created_at": datetime.now(UTC).isoformat(),
         "input_hashes": input_hashes,
         "config_status": config.phase1.status,
+        "artifact_files": sorted(path.name for path in output.iterdir()),
+    }
+    (output / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return Phase1Result(artifact_directory=output, summary=summary)
+
+
+def run_phase1_1(
+    project_root: Path,
+    data_root: Path,
+    *,
+    artifact_root: Path | None = None,
+) -> Phase1Result:
+    """Run the preregistered Phase-1.1 full-session setup revision."""
+
+    config = load_project_config(project_root / "config")
+    _validate_phase11_shared_settings(config)
+    parent_artifact = (
+        project_root
+        / "artifacts"
+        / "phase1"
+        / config.phase1_1.parent.fingerprint
+    )
+    parent_signal_path = parent_artifact / "signals.parquet"
+    if not parent_signal_path.is_file():
+        raise ValueError(
+            "Phase 1.1 requires the registered parent signals artifact: "
+            f"{parent_signal_path}"
+        )
+
+    input_paths = canonical_m5_paths(data_root, config.research)
+    fingerprint, input_hashes = _fingerprint(project_root, input_paths)
+    parent = artifact_root or project_root / "artifacts" / "phase1_1"
+    output = parent / fingerprint
+    output.mkdir(parents=True, exist_ok=True)
+
+    m5 = load_canonical_m5(data_root, config.research)
+    bars = _prepare_bars(m5, config)
+    (
+        _,
+        breaks,
+        gaps,
+        _,
+        snapshots,
+        contexts,
+        _,
+        _,
+    ) = _primary_labels(bars, config)
+    opportunities = build_full_session_opportunities(m5, config)
+
+    p0_directions, p0_fit = _fit_p0_directions(
+        opportunities, bars["15min"], m5, config
+    )
+    p0 = _session_open_signals(
+        opportunities,
+        bars["15min"],
+        model_id="p0_session_drift",
+        directions=p0_directions,
+        signal_type="fitted_fixed_session_direction",
+    )
+    momentum = _h4_momentum_directions(opportunities, bars["4H"])
+    p1 = _session_open_signals(
+        opportunities,
+        bars["15min"],
+        model_id="p1_h4_momentum",
+        directions=momentum,
+        signal_type="latest_completed_h4_close_change",
+    )
+    p2 = _h4_sr_signals(
+        opportunities,
+        bars["15min"],
+        bars["4H"],
+        snapshots["4H"],
+        config,
+        decision_must_be_before_end=True,
+    )
+    (
+        p3,
+        p4,
+        p5,
+        structure_candidates,
+        aligned_candidates,
+        fvg_candidates,
+    ) = _full_session_structure_signals(
+        opportunities,
+        breaks["15min"],
+        contexts,
+        gaps["15min"],
+    )
+
+    base = pd.concat(
+        [frame.dropna(axis=1, how="all") for frame in (p0, p1, p2)],
+        ignore_index=True,
+        sort=False,
+    )
+    base = _attach_contexts(base, contexts)
+    signals = pd.concat([base, p3, p4, p5], ignore_index=True, sort=False)
+    signals = signals.sort_values(
+        ["decision_at", "model_id", "opportunity_id"], kind="stable"
+    ).reset_index(drop=True)
+    signals = _attach_local_decision_hour(signals, config)
+
+    primary_slippage = config.execution.costs.slippage_pips_per_side
+    stress_slippage = config.execution.costs.stress_slippage_pips_per_side
+    trades = _simulate_signals(
+        signals, m5, config, slippage_pips_per_side=primary_slippage
+    )
+    stress_trades = _simulate_signals(
+        signals, m5, config, slippage_pips_per_side=stress_slippage
+    )
+    panel = _opportunity_panel(opportunities, trades)
+    stress_panel = _opportunity_panel(opportunities, stress_trades)
+    metrics = _metrics(opportunities, trades)
+    stress_metrics = _metrics(opportunities, stress_trades)
+    bootstrap = _cluster_bootstrap(panel, config)
+
+    parent_signals = pd.read_parquet(parent_signal_path)
+    failures = _phase11_invariant_failures(
+        signals,
+        trades,
+        structure_candidates,
+        aligned_candidates,
+        fvg_candidates,
+        parent_signals,
+    )
+    gates = _candidate_gates(
+        opportunities,
+        trades,
+        stress_trades,
+        panel,
+        bootstrap,
+        failures,
+        config,
+    )
+
+    desired = structure_candidates["direction"].map(
+        {"long": "bullish", "short": "bearish"}
+    )
+    h1_aligned = structure_candidates["h1_context"].eq(desired)
+    h4_aligned = structure_candidates["h4_context"].eq(desired)
+    alignment_funnel = {
+        "structure_candidates": len(structure_candidates),
+        "h1_aligned_candidates": int(h1_aligned.sum()),
+        "h4_aligned_candidates": int(h4_aligned.sum()),
+        "h1_h4_aligned_candidates": int((h1_aligned & h4_aligned).sum()),
+        "aligned_displacement_fvg_candidates": len(fvg_candidates),
+    }
+
+    parent_counts = parent_signals.groupby("model_id").size()
+    current_counts = signals.groupby("model_id").size()
+    comparison_rows = []
+    for model_id in MODEL_IDS:
+        parent_count = int(parent_counts.get(model_id, 0))
+        current_count = int(current_counts.get(model_id, 0))
+        comparison_rows.append(
+            {
+                "model_id": model_id,
+                "parent_opening_window_count": parent_count,
+                "full_session_count": current_count,
+                "added_count": current_count - parent_count,
+            }
+        )
+    parent_comparison = pd.DataFrame.from_records(comparison_rows)
+
+    setup_signals = signals[
+        signals["model_id"].isin(
+            {
+                "p2_h4_sr",
+                "p3_m15_structure",
+                "p4_top_down_structure",
+                "p5_top_down_structure_fvg",
+            }
+        )
+    ]
+    hour_counts = (
+        setup_signals.groupby(
+            ["model_id", "year", "session", "decision_local_hour"],
+            sort=True,
+        )
+        .size()
+        .rename("signal_count")
+        .reset_index()
+    )
+
+    summary = {
+        "phase": config.phase1_1.phase,
+        "fingerprint": fingerprint,
+        "parent_fingerprint": config.phase1_1.parent.fingerprint,
+        "price_source": config.research.data.price_source,
+        "source_role": config.research.data.source_role,
+        "broker_specific_spread_claim": (
+            config.execution.pricing.broker_specific_spread_claim
+        ),
+        "setup_signal_window": config.phase1_1.opportunity.setup_signal_window,
+        "setup_selection": config.phase1_1.opportunity.setup_selection,
+        "minimum_minutes_remaining": (
+            config.phase1_1.opportunity.minimum_minutes_remaining
+        ),
+        "order_block_used": False,
+        "h1_support_resistance_used": False,
+        "fundamental_used": False,
+        "opportunity_count": len(opportunities),
+        "signal_counts": {
+            model_id: int(signals["model_id"].eq(model_id).sum())
+            for model_id in MODEL_IDS
+        },
+        "alignment_funnel": alignment_funnel,
+        "p0_selected_directions": {
+            row["session"]: row["direction"]
+            for row in p0_fit[p0_fit["selected"]].to_dict("records")
+        },
+        "invariant_failure_count": sum(
+            int(item.get("failure_count", 1)) for item in failures
+        ),
+        "invariant_failures": failures,
+        "candidate_gates": gates,
+        "any_candidate_passed": any(item["passed"] for item in gates.values()),
+    }
+
+    opportunities.to_parquet(output / "opportunities.parquet", index=False)
+    signals.to_parquet(output / "signals.parquet", index=False)
+    structure_candidates.to_parquet(
+        output / "m15-structure-candidates.parquet", index=False
+    )
+    aligned_candidates.to_parquet(
+        output / "m15-aligned-candidates.parquet", index=False
+    )
+    fvg_candidates.to_parquet(
+        output / "m15-aligned-fvg-candidates.parquet", index=False
+    )
+    trades.to_parquet(output / "trades-primary.parquet", index=False)
+    stress_trades.to_parquet(output / "trades-stress.parquet", index=False)
+    panel.to_parquet(output / "opportunity-panel-primary.parquet", index=False)
+    stress_panel.to_parquet(output / "opportunity-panel-stress.parquet", index=False)
+    p0_fit.to_csv(output / "p0-fit.csv", index=False)
+    metrics.to_csv(output / "metrics-primary.csv", index=False)
+    stress_metrics.to_csv(output / "metrics-stress.csv", index=False)
+    bootstrap.to_csv(output / "bootstrap.csv", index=False)
+    parent_comparison.to_csv(output / "parent-signal-comparison.csv", index=False)
+    hour_counts.to_csv(output / "signal-counts-by-local-hour.csv", index=False)
+    (output / "summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True, default=_json_default) + "\n",
+        encoding="utf-8",
+    )
+    manifest = {
+        "phase": summary["phase"],
+        "fingerprint": fingerprint,
+        "parent_fingerprint": config.phase1_1.parent.fingerprint,
+        "created_at": datetime.now(UTC).isoformat(),
+        "input_hashes": input_hashes,
+        "config_status": config.phase1_1.status,
         "artifact_files": sorted(path.name for path in output.iterdir()),
     }
     (output / "manifest.json").write_text(

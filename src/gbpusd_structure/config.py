@@ -501,6 +501,75 @@ class Phase1Config(StrictModel):
         return self
 
 
+class Phase11ParentConfig(StrictModel):
+    branch: Literal["phase/01-nested-price-baselines"]
+    fingerprint: Literal["daac4b3ee86ac545"]
+
+
+class Phase11OpportunityConfig(StrictModel):
+    maximum_trades_per_model_session: Literal[1]
+    setup_signal_window: Literal["full_session"]
+    setup_selection: Literal["first_candidate_satisfying_each_model"]
+    require_session_open_m5_bar: Literal[True]
+    decision_must_be_before_cutoff: Literal[True]
+    minimum_minutes_remaining: Literal[0]
+    window_end: dict[
+        Literal["london", "new_york"],
+        Literal["new_york_open", "fx_day_boundary"],
+    ]
+
+    @model_validator(mode="after")
+    def validate_window_end(self) -> Phase11OpportunityConfig:
+        expected = {
+            "london": "new_york_open",
+            "new_york": "fx_day_boundary",
+        }
+        if self.window_end != expected:
+            raise ValueError("Phase 1.1 session ends must remain frozen")
+        return self
+
+
+class Phase11BaselineConfig(StrictModel):
+    id: Phase1ModelId
+    signal: Literal[
+        "fitted_fixed_session_direction",
+        "latest_completed_h4_close_change",
+        "first_causal_h4_zone_breakout_or_rejection",
+        "first_m15_bos_or_choch",
+        "first_m15_structure_aligned_with_h1_and_h4_context",
+        "first_aligned_structure_with_displacement_and_directional_fvg",
+    ]
+
+
+class Phase11Config(StrictModel):
+    phase: Literal["phase1_1_full_session_setups"]
+    status: Literal["preregistered_after_phase1"]
+    parent: Phase11ParentConfig
+    scope: Phase1ScopeConfig
+    opportunity: Phase11OpportunityConfig
+    baselines: tuple[Phase11BaselineConfig, ...]
+    session_drift_fit: Phase1SessionDriftConfig
+    support_resistance_signal: Phase1SupportResistanceSignalConfig
+    structure_signal: Phase1StructureSignalConfig
+    risk: Phase1RiskConfig
+    statistics: Phase1StatisticsConfig
+    advancement_gate: Phase1AdvancementGateConfig
+
+    @model_validator(mode="after")
+    def validate_revision(self) -> Phase11Config:
+        expected = (
+            "p0_session_drift",
+            "p1_h4_momentum",
+            "p2_h4_sr",
+            "p3_m15_structure",
+            "p4_top_down_structure",
+            "p5_top_down_structure_fvg",
+        )
+        if tuple(item.id for item in self.baselines) != expected:
+            raise ValueError("Phase 1.1 baseline ladder must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -508,6 +577,7 @@ class ProjectConfig(StrictModel):
     structure: StructureConfig
     execution: ExecutionConfig
     phase1: Phase1Config
+    phase1_1: Phase11Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -542,6 +612,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1=Phase1Config.model_validate(
             _read_yaml(config_directory / "phase1.yaml")
+        ),
+        phase1_1=Phase11Config.model_validate(
+            _read_yaml(config_directory / "phase1_1.yaml")
         ),
     )
 

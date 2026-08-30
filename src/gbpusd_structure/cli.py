@@ -14,7 +14,7 @@ from gbpusd_structure.config import load_project_config, resolve_data_root
 from gbpusd_structure.data import audit_canonical_m5
 from gbpusd_structure.paths import find_project_root
 from gbpusd_structure.phase0 import run_phase0_2
-from gbpusd_structure.phase1 import run_phase1
+from gbpusd_structure.phase1 import run_phase1, run_phase1_1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,6 +54,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="run preregistered nested price baselines with full costs",
     )
     phase1.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="optional artifact parent; fingerprint is appended automatically",
+    )
+    phase1_1 = subparsers.add_parser(
+        "run-phase1-1",
+        help="run the preregistered full-session setup revision",
+    )
+    phase1_1.add_argument(
         "--artifact-root",
         type=Path,
         help="optional artifact parent; fingerprint is appended automatically",
@@ -145,6 +154,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "invariant_failure_count"
             ],
             "signal_counts": result.summary["signal_counts"],
+        }
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0 if result.summary["any_candidate_passed"] else 1
+    if args.command == "run-phase1-1":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        artifact_root = args.artifact_root
+        if artifact_root is not None and not artifact_root.is_absolute():
+            artifact_root = project_root / artifact_root
+        try:
+            result = run_phase1_1(
+                project_root,
+                root,
+                artifact_root=artifact_root,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"Phase 1.1 failed: {exc}", file=sys.stderr)
+            return 1
+        output = {
+            "artifact_directory": str(result.artifact_directory),
+            "any_candidate_passed": result.summary["any_candidate_passed"],
+            "invariant_failure_count": result.summary[
+                "invariant_failure_count"
+            ],
+            "signal_counts": result.summary["signal_counts"],
+            "alignment_funnel": result.summary["alignment_funnel"],
         }
         print(json.dumps(output, indent=2, sort_keys=True))
         return 0 if result.summary["any_candidate_passed"] else 1

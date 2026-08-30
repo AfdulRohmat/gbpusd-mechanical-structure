@@ -6,7 +6,9 @@ import pytest
 from gbpusd_structure.config import load_project_config
 from gbpusd_structure.phase1 import (
     _invariant_failures,
+    _select_first_structure_signal,
     _simulate_trade,
+    build_full_session_opportunities,
     build_session_opportunities,
 )
 
@@ -118,6 +120,61 @@ def test_session_calendar_resolves_london_dst() -> None:
 
     london = opportunities[opportunities["session"].eq("london")]
     assert set(london["session_open_at"].dt.hour) == {7, 8}
+
+
+def test_full_session_observation_ends_at_management_cutoff() -> None:
+    config = load_project_config(PROJECT_ROOT / "config")
+    m5 = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2024-01-02T08:00:00Z",
+                    "2024-01-02T13:00:00Z",
+                ]
+            )
+        }
+    )
+
+    opportunities = build_full_session_opportunities(m5, config)
+
+    assert opportunities["observation_end_at"].equals(opportunities["cutoff_at"])
+
+
+def test_each_model_can_select_its_own_later_valid_candidate() -> None:
+    candidates = pd.DataFrame(
+        [
+            {
+                "opportunity_id": "2024-01-02:london",
+                "decision_at": pd.Timestamp("2024-01-02T08:15:00Z"),
+                "source_event_id": "first_unaligned",
+                "model_id": "p3_m15_structure",
+                "signal_type": "candidate",
+                "signal_id": "candidate:first",
+            },
+            {
+                "opportunity_id": "2024-01-02:london",
+                "decision_at": pd.Timestamp("2024-01-02T10:00:00Z"),
+                "source_event_id": "later_aligned",
+                "model_id": "p3_m15_structure",
+                "signal_type": "candidate",
+                "signal_id": "candidate:later",
+            },
+        ]
+    )
+
+    p3 = _select_first_structure_signal(
+        candidates,
+        model_id="p3_m15_structure",
+        signal_type="first_structure",
+    )
+    p4 = _select_first_structure_signal(
+        candidates[candidates["source_event_id"].eq("later_aligned")],
+        model_id="p4_top_down_structure",
+        signal_type="first_aligned_structure",
+    )
+
+    assert p3.iloc[0]["source_event_id"] == "first_unaligned"
+    assert p4.iloc[0]["source_event_id"] == "later_aligned"
 
 
 def test_invariants_reject_child_without_parent() -> None:
