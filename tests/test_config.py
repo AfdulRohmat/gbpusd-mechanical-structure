@@ -30,6 +30,14 @@ def test_checked_in_configuration_is_valid() -> None:
     assert config.structure.order_block.strategy_admitted is False
     assert config.structure.order_block.candidate_lookback_bars == 6
     assert config.structure.order_block.maximum_age_bars == 50
+    assert config.phase1.scope.price_only is True
+    assert "order_block" in config.phase1.scope.excluded_features
+    assert config.phase1.advancement_gate.candidates == (
+        "p4_top_down_structure",
+        "p5_top_down_structure_fvg",
+    )
+    assert config.phase1.risk.stop_atr == pytest.approx(1.0)
+    assert config.phase1.risk.target_r == pytest.approx(2.0)
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

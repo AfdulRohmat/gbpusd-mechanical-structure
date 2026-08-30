@@ -325,12 +325,189 @@ class ExecutionConfig(StrictModel):
     simulation: ExecutionSimulationConfig
 
 
+Phase1ModelId = Literal[
+    "p0_session_drift",
+    "p1_h4_momentum",
+    "p2_h4_sr",
+    "p3_m15_structure",
+    "p4_top_down_structure",
+    "p5_top_down_structure_fvg",
+]
+
+
+class Phase1ScopeConfig(StrictModel):
+    sessions: tuple[Literal["london", "new_york"], ...]
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    price_only: Literal[True]
+    excluded_features: tuple[
+        Literal[
+            "order_block",
+            "h1_support_resistance",
+            "fundamental_bias",
+            "ema",
+            "rsi",
+        ],
+        ...,
+    ]
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> Phase1ScopeConfig:
+        if self.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1 sessions must be London then New York")
+        required = {
+            "order_block",
+            "h1_support_resistance",
+            "fundamental_bias",
+            "ema",
+            "rsi",
+        }
+        if set(self.excluded_features) != required:
+            raise ValueError("Phase 1 exclusions must remain frozen")
+        return self
+
+
+class Phase1OpportunityConfig(StrictModel):
+    maximum_trades_per_model_session: Literal[1]
+    signal_observation_minutes: int = Field(gt=0)
+    require_session_open_m5_bar: Literal[True]
+
+
+class Phase1BaselineConfig(StrictModel):
+    id: Phase1ModelId
+    signal: Literal[
+        "fitted_fixed_session_direction",
+        "latest_completed_h4_close_change",
+        "first_causal_h4_zone_breakout_or_rejection",
+        "first_m15_bos_or_choch",
+        "p3_aligned_with_h1_and_h4_context",
+        "p4_with_displacement_and_same_bar_directional_fvg",
+    ]
+
+
+class Phase1SessionDriftConfig(StrictModel):
+    fit_period: Literal["construction"]
+    fit_separately_by_session: Literal[True]
+    candidates: tuple[Literal["long", "short"], ...]
+    objective: Literal["mean_primary_net_r"]
+    tie_break: Literal["long"]
+
+
+class Phase1SupportResistanceSignalConfig(StrictModel):
+    source_timeframe: Literal["4H"]
+    setup_timeframe: Literal["15min"]
+    require_zone_active_before_setup_bar: Literal[True]
+    maximum_zone_age_h4_bars: int = Field(ge=1)
+    breakout_close_buffer_atr: float = Field(ge=0)
+    candidate_order: tuple[
+        Literal["normalized_distance", "breakout_before_rejection", "zone_id"],
+        ...,
+    ]
+
+
+class Phase1StructureSignalConfig(StrictModel):
+    setup_timeframe: Literal["15min"]
+    event_types: tuple[Literal["bos", "choch"], ...]
+    top_down_context_timeframes: tuple[Literal["1H", "4H"], ...]
+    daily_role: Literal["report_stratum_only"]
+    fvg_same_bar_required: Literal[True]
+    fvg_same_direction_required: Literal[True]
+    displacement_required_for_fvg_model: Literal[True]
+
+
+class Phase1RiskConfig(StrictModel):
+    stop_atr: float = Field(gt=0)
+    target_r: float = Field(gt=0)
+    atr_source: Literal["signal_m15_atr"]
+    bracket_anchor: Literal["observed_entry_quote_before_slippage"]
+    management_cutoff: dict[
+        Literal["london", "new_york"],
+        Literal["new_york_open", "fx_day_boundary"],
+    ]
+    force_flat_at_cutoff: Literal[True]
+    concurrent_positions_per_model: Literal[1]
+
+    @model_validator(mode="after")
+    def validate_cutoffs(self) -> Phase1RiskConfig:
+        expected = {
+            "london": "new_york_open",
+            "new_york": "fx_day_boundary",
+        }
+        if self.management_cutoff != expected:
+            raise ValueError("Phase 1 management cutoffs must remain frozen")
+        return self
+
+
+class Phase1StatisticsConfig(StrictModel):
+    comparison_unit: Literal["session_day_opportunity"]
+    no_trade_return_r: Literal[0.0]
+    bootstrap_unit: Literal["fx_session_date"]
+    bootstrap_resamples: int = Field(ge=100)
+    confidence_level: float = Field(gt=0, lt=1)
+    primary_period: Literal["replication"]
+    construction_is_descriptive: Literal[True]
+
+
+class Phase1AdvancementGateConfig(StrictModel):
+    candidates: tuple[
+        Literal["p4_top_down_structure", "p5_top_down_structure_fvg"], ...
+    ]
+    require_zero_causality_failures: Literal[True]
+    minimum_trades_per_year: int = Field(ge=1)
+    minimum_trades_per_session_replication: int = Field(ge=1)
+    minimum_trades_per_direction_replication: int = Field(ge=1)
+    require_positive_construction_expectancy: Literal[True]
+    require_positive_replication_expectancy: Literal[True]
+    require_positive_replication_expectancy_each_session: Literal[True]
+    require_positive_replication_expectancy_each_direction: Literal[True]
+    require_replication_profit_factor_above_one: Literal[True]
+    require_replication_opportunity_mean_ci_above_zero: Literal[True]
+    require_positive_stress_replication_expectancy: Literal[True]
+    maximum_best_month_share_of_positive_r: float = Field(gt=0, le=1)
+    nearest_baseline: dict[
+        Literal["p4_top_down_structure", "p5_top_down_structure_fvg"],
+        Literal["p3_m15_structure", "p4_top_down_structure"],
+    ]
+    require_positive_incremental_replication_opportunity_mean: Literal[True]
+
+
+class Phase1Config(StrictModel):
+    phase: Literal["phase1_nested_price_baselines"]
+    status: Literal["preregistered"]
+    scope: Phase1ScopeConfig
+    opportunity: Phase1OpportunityConfig
+    baselines: tuple[Phase1BaselineConfig, ...]
+    session_drift_fit: Phase1SessionDriftConfig
+    support_resistance_signal: Phase1SupportResistanceSignalConfig
+    structure_signal: Phase1StructureSignalConfig
+    risk: Phase1RiskConfig
+    statistics: Phase1StatisticsConfig
+    advancement_gate: Phase1AdvancementGateConfig
+
+    @model_validator(mode="after")
+    def validate_baseline_ladder(self) -> Phase1Config:
+        expected = (
+            "p0_session_drift",
+            "p1_h4_momentum",
+            "p2_h4_sr",
+            "p3_m15_structure",
+            "p4_top_down_structure",
+            "p5_top_down_structure_fvg",
+        )
+        if tuple(item.id for item in self.baselines) != expected:
+            raise ValueError("Phase 1 baseline ladder must remain frozen")
+        if self.structure_signal.event_types != ("bos", "choch"):
+            raise ValueError("Phase 1 structure events must be BOS then CHoCH")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
     fundamental: FundamentalConfig
     structure: StructureConfig
     execution: ExecutionConfig
+    phase1: Phase1Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -362,6 +539,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         execution=ExecutionConfig.model_validate(
             _read_yaml(config_directory / "execution.yaml")
+        ),
+        phase1=Phase1Config.model_validate(
+            _read_yaml(config_directory / "phase1.yaml")
         ),
     )
 
