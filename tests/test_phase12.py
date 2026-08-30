@@ -2,6 +2,7 @@ import pandas as pd
 
 from gbpusd_structure.phase12 import (
     FORBIDDEN_COVERAGE_COLUMN_PARTS,
+    _construction_metrics,
     filter_candidate_mask,
     select_first_filter_candidates,
 )
@@ -62,3 +63,23 @@ def test_filter_selects_later_candidate_that_satisfies_complete_rule() -> None:
 def test_coverage_forbidden_names_include_execution_outcomes() -> None:
     assert "net_r" in FORBIDDEN_COVERAGE_COLUMN_PARTS
     assert "exit" in FORBIDDEN_COVERAGE_COLUMN_PARTS
+
+
+def test_construction_metrics_use_common_opportunity_denominator() -> None:
+    opportunities = pd.DataFrame({"opportunity_id": ["one", "two"]})
+    trades = pd.DataFrame(
+        {
+            "model_id": ["f1_displacement"],
+            "net_r": [1.0],
+            "win": [True],
+        }
+    )
+
+    metrics = _construction_metrics(
+        opportunities,
+        trades,
+        ("f1_displacement",),
+    ).iloc[0]
+
+    assert metrics["mean_trade_net_r"] == 1.0
+    assert metrics["mean_opportunity_net_r"] == 0.5

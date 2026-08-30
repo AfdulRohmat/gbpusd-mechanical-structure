@@ -722,6 +722,45 @@ class Phase12Config(StrictModel):
     replication_gate: Phase12ReplicationGateConfig
 
 
+class Phase12CoverageEligibleConfig(StrictModel):
+    id: Literal["f1_displacement", "f4_h1_h4_opposition_veto"]
+    trade_count: int = Field(ge=240, le=300)
+    mean_trades_per_month: float = Field(ge=20, le=25)
+
+
+class Phase12CoverageExcludedConfig(StrictModel):
+    id: Literal[
+        "f2_h1_opposition_veto",
+        "f3_h4_opposition_veto",
+        "f5_displacement_h4_veto",
+        "f6_displacement_h1_h4_veto",
+    ]
+    trade_count: int = Field(ge=0)
+    reason: Literal["above_coverage_maximum", "below_coverage_minimum"]
+
+
+class Phase12CoverageSelectionConfig(StrictModel):
+    phase: Literal["phase1_2_light_filter_ablation"]
+    stage: Literal["construction_coverage_only"]
+    status: Literal["frozen_before_construction_pnl"]
+    coverage_fingerprint: Literal["accd1392cff3c949"]
+    parent_fingerprint: Literal["90d1e369b427d3d8"]
+    construction_year: Literal[2024]
+    target_trade_count: tuple[Literal[240], Literal[300]]
+    pnl_inspected: Literal[False]
+    eligible_filters: tuple[Phase12CoverageEligibleConfig, ...]
+    excluded_filters: tuple[Phase12CoverageExcludedConfig, ...]
+
+    @model_validator(mode="after")
+    def validate_frozen_coverage(self) -> Phase12CoverageSelectionConfig:
+        eligible = tuple(item.id for item in self.eligible_filters)
+        if eligible != ("f1_displacement", "f4_h1_h4_opposition_veto"):
+            raise ValueError("Frozen Phase 1.2 coverage selection changed")
+        if sum(item.trade_count for item in self.eligible_filters) != 563:
+            raise ValueError("Frozen Phase 1.2 coverage counts changed")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -731,6 +770,7 @@ class ProjectConfig(StrictModel):
     phase1: Phase1Config
     phase1_1: Phase11Config
     phase1_2: Phase12Config
+    phase1_2_coverage_selection: Phase12CoverageSelectionConfig
 
 
 def _read_yaml(path: Path) -> object:
@@ -771,6 +811,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1_2=Phase12Config.model_validate(
             _read_yaml(config_directory / "phase1_2.yaml")
+        ),
+        phase1_2_coverage_selection=Phase12CoverageSelectionConfig.model_validate(
+            _read_yaml(config_directory / "phase1_2_coverage_selection.yaml")
         ),
     )
 
