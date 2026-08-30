@@ -25,21 +25,22 @@ future leakage.
 
 ## Current status
 
-Phase 0.1 has been executed. It defines and validates labels; it does not trade.
-The refined swing and protected-structure state machine passed its registered
-gates with zero point-in-time failures. H1 S/R remains excluded because one
-sensitivity scored 69.69% against the frozen 70% requirement; H4 S/R passed.
+Phase 1 has been executed from a preregistered price-only specification. It
+tested session drift, H4 momentum, causal H4 S/R interactions, M15 BOS/CHoCH,
+exact H1+H4 structural alignment, and a displacement/FVG subset with observed
+Bid/Ask quotes and full explicit costs.
 
-Phase 0.2 then audited a mechanical Order Block definition. Formation and
-lifecycle rules passed, but full-wick versus body geometry failed on M15, H1,
-and H4. Order Blocks remain diagnostic labels and are not admitted to Phase 1.
+No candidate advanced. P0–P3 were negative in both construction and historical
+replication. Exact H1+H4 alignment reduced 323 M15 structural signals to nine;
+the six 2025 examples were positive but the three 2024 examples were all losses
+and the sample failed the frozen evidence gates. Adding same-bar displacement
+and FVG reduced the sample to zero.
 
-- No strategy P&L has been inspected.
-- BOS, CHoCH, FVG, swing, and S/R definitions are initial operational
-  specifications whose stability will be measured without optimizing returns.
-- Order blocks remain deferred until a reproducible definition survives a
-  standalone label audit.
-- EMA and RSI are registered as secondary ablations, not default confluence.
+- The Phase-1 run had zero point-in-time or execution invariant failures.
+- H1 S/R remains excluded after its Phase-0.1 stability failure.
+- Order Blocks remain diagnostic only after the Phase-0.2 geometry failure and
+  were not used anywhere in Phase 1.
+- Fundamentals, EMA, and RSI remain untested incremental layers.
 
 See:
 
@@ -53,6 +54,8 @@ See:
 - `docs/PHASE0_1_RESULTS.md`
 - `docs/TECHNICAL_PLAN_PHASE0_2.md`
 - `docs/PHASE0_2_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1.md`
+- `docs/PHASE1_RESULTS.md`
 
 ## Setup
 
@@ -121,3 +124,13 @@ The command writes fingerprinted, gitignored tables and reports below
 `artifacts/phase0_2/`. A non-zero exit status means at least one registered
 definition gate failed; it does not mean the command crashed. Inspect that
 run's `summary.json` for the exact failed scopes.
+
+Run the preregistered Phase-1 nested price baselines:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1
+```
+
+The official run writes to `artifacts/phase1/daac4b3ee86ac545/`. The command
+returns non-zero when no advancement candidate passes; this is a research-gate
+result, not a simulator crash.
