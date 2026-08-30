@@ -20,6 +20,7 @@ from gbpusd_structure.phase12 import (
     run_phase12_coverage,
 )
 from gbpusd_structure.phase13 import run_phase1_3
+from gbpusd_structure.phase14 import run_phase1_4_construction
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -95,6 +96,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="run the P3 MAE/MFE and stop-adequacy path audit",
     )
     phase13.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="optional artifact parent; fingerprint is appended automatically",
+    )
+    phase14_construction = subparsers.add_parser(
+        "run-phase1-4-construction",
+        help="run 2024 structural-invalidation stop construction ablation",
+    )
+    phase14_construction.add_argument(
         "--artifact-root",
         type=Path,
         help="optional artifact parent; fingerprint is appended automatically",
@@ -298,4 +308,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(output, indent=2, sort_keys=True))
         return 0 if result.summary["invariant_failure_count"] == 0 else 1
+    if args.command == "run-phase1-4-construction":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        artifact_root = args.artifact_root
+        if artifact_root is not None and not artifact_root.is_absolute():
+            artifact_root = project_root / artifact_root
+        try:
+            result = run_phase1_4_construction(
+                project_root,
+                root,
+                artifact_root=artifact_root,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"Phase 1.4 construction failed: {exc}", file=sys.stderr)
+            return 1
+        output = {
+            "artifact_directory": str(result.artifact_directory),
+            "signal_count": result.summary["signal_count"],
+            "invariant_failure_count": result.summary[
+                "invariant_failure_count"
+            ],
+            "construction_gate": result.summary["construction_gate"],
+            "replication_permitted": result.summary["replication_permitted"],
+        }
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0 if result.summary["replication_permitted"] else 1
     raise AssertionError(f"Unhandled command: {args.command}")

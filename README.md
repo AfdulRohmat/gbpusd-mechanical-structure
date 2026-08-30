@@ -171,3 +171,14 @@ The frozen diagnostic contract is documented in
 The completed audit is recorded in
 [`docs/PHASE1_3_RESULTS.md`](docs/PHASE1_3_RESULTS.md), with official local
 evidence under `artifacts/phase1_3/c9475ab43c8aba4a/`.
+
+Phase 1.4 compares the frozen ATR bracket with a causal opposing-swing
+invalidation stop. Construction must qualify before structural-stop replication
+can be opened:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-4-construction
+```
+
+The staged contract is documented in
+[`docs/TECHNICAL_PLAN_PHASE1_4.md`](docs/TECHNICAL_PLAN_PHASE1_4.md).
