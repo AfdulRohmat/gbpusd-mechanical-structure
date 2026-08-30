@@ -1,0 +1,29 @@
+phase: phase1_2_light_filter_ablation
+stage: construction_coverage_only
+status: frozen_before_construction_pnl
+coverage_fingerprint: accd1392cff3c949
+parent_fingerprint: 90d1e369b427d3d8
+construction_year: 2024
+target_trade_count: [240, 300]
+pnl_inspected: false
+eligible_filters:
+  - id: f1_displacement
+    trade_count: 275
+    mean_trades_per_month: 22.9166666667
+  - id: f4_h1_h4_opposition_veto
+    trade_count: 288
+    mean_trades_per_month: 24.0
+excluded_filters:
+  - id: f2_h1_opposition_veto
+    trade_count: 343
+    reason: above_coverage_maximum
+  - id: f3_h4_opposition_veto
+    trade_count: 327
+    reason: above_coverage_maximum
+  - id: f5_displacement_h4_veto
+    trade_count: 223
+    reason: below_coverage_minimum
+  - id: f6_displacement_h1_h4_veto
+    trade_count: 190
+    reason: below_coverage_minimum
+
