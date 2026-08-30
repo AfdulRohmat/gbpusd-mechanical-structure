@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from gbpusd_structure.config import load_project_config, resolve_data_root
+from gbpusd_structure.data import audit_canonical_m5
 from gbpusd_structure.paths import find_project_root
 
 
@@ -32,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-exists",
         action="store_true",
         help="return an error when the resolved directory does not exist",
+    )
+    subparsers.add_parser(
+        "audit-data",
+        help="audit canonical M5 coverage, schema, and observed spread proxy",
     )
     return parser
 
@@ -63,4 +68,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         print(root)
         return 0
+    if args.command == "audit-data":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        summary = audit_canonical_m5(root, config.research)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0 if summary["valid"] else 1
     raise AssertionError(f"Unhandled command: {args.command}")

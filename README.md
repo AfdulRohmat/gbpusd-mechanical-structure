@@ -39,6 +39,8 @@ See:
 - `docs/PRD_GBPUSD_MECHANICAL_STRUCTURE.md`
 - `docs/TECHNICAL_PLAN_PHASE0.md`
 - `docs/SHARED_DATA_CONTRACT.md`
+- `docs/TEMPORARY_EXECUTION_MODEL.md`
+- `docs/DATA_BASELINE_2024_2025.md`
 
 ## Setup
 
@@ -76,3 +78,23 @@ The source repository `gbpusd-auction-value-volume-research` remains the audit
 record for the earlier auction/value/volume hypotheses. This project imports
 data contracts and selected point-in-time infrastructure, not conclusions or
 strategy thresholds from that research.
+
+## Temporary execution source
+
+During Phase 0, the local `data/` path points to the existing 2024–2025 GBPUSD
+dataset from the auction/value/volume project. No market data is duplicated.
+
+- Price and structure use the existing HistData-derived M5 bars.
+- Execution uses their observed historical Bid/Ask spread as a conservative
+  proxy; it is not labeled as an Exness spread.
+- Raw Spread commission is modeled at USD 3.50/lot/side (`0.35` pip/side for
+  one standard GBPUSD lot).
+- Primary slippage is `0.10` pip/side, with `0.20` pip/side registered stress.
+- When account-aligned Exness MT5 data becomes available, only the data and
+  pricing adapter changes; the structure definitions remain frozen.
+
+Audit the linked dataset with:
+
+```bash
+.venv/bin/python -m gbpusd_structure audit-data
+```

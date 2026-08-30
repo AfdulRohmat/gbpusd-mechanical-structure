@@ -1,0 +1,19 @@
+pricing:
+  mode: observed_bid_ask
+  source: histdata
+  broker_specific_spread_claim: false
+  replacement_feed: exness_mt5_raw_spread
+
+costs:
+  commission_usd_per_lot_per_side: 3.50
+  usd_per_pip_per_standard_lot: 10.00
+  slippage_pips_per_side: 0.10
+  stress_slippage_pips_per_side: 0.20
+  swap_enabled: false
+
+simulation:
+  intrabar_priority: stop_first
+  long_entry_quote: ask
+  long_exit_quote: bid
+  short_entry_quote: bid
+  short_exit_quote: ask

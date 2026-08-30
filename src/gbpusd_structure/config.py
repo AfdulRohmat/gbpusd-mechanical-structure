@@ -37,6 +37,8 @@ class InstrumentConfig(StrictModel):
 class DataConfig(StrictModel):
     root_environment_variable: str
     local_fallback: Path
+    price_source: Literal["histdata_bid_ask", "exness_mt5_bid_ask"]
+    source_role: Literal["temporary_development_proxy", "broker_execution_feed"]
     canonical_m5_glob: str
     fundamental_directory: Path
     timezone: Literal["UTC"]
@@ -63,7 +65,7 @@ class EvidencePeriodsConfig(StrictModel):
             self.research_start
             < self.construction_end
             < self.replication_end
-            < self.research_end
+            == self.research_end
             < self.future_lockbox_start
         ):
             raise ValueError("research and lockbox boundaries must be increasing")
@@ -235,11 +237,54 @@ class StructureConfig(StrictModel):
     order_block: OrderBlockConfig
 
 
+class ExecutionPricingConfig(StrictModel):
+    mode: Literal["observed_bid_ask"]
+    source: Literal["histdata", "exness_mt5"]
+    broker_specific_spread_claim: Literal[False]
+    replacement_feed: Literal["exness_mt5_raw_spread"]
+
+
+class ExecutionCostsConfig(StrictModel):
+    commission_usd_per_lot_per_side: float = Field(ge=0)
+    usd_per_pip_per_standard_lot: float = Field(gt=0)
+    slippage_pips_per_side: float = Field(ge=0)
+    stress_slippage_pips_per_side: float = Field(ge=0)
+    swap_enabled: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_costs(self) -> ExecutionCostsConfig:
+        if self.stress_slippage_pips_per_side < self.slippage_pips_per_side:
+            raise ValueError("stress slippage must not be below primary slippage")
+        return self
+
+    @property
+    def commission_pips_per_side(self) -> float:
+        return (
+            self.commission_usd_per_lot_per_side
+            / self.usd_per_pip_per_standard_lot
+        )
+
+
+class ExecutionSimulationConfig(StrictModel):
+    intrabar_priority: Literal["stop_first"]
+    long_entry_quote: Literal["ask"]
+    long_exit_quote: Literal["bid"]
+    short_entry_quote: Literal["bid"]
+    short_exit_quote: Literal["ask"]
+
+
+class ExecutionConfig(StrictModel):
+    pricing: ExecutionPricingConfig
+    costs: ExecutionCostsConfig
+    simulation: ExecutionSimulationConfig
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
     fundamental: FundamentalConfig
     structure: StructureConfig
+    execution: ExecutionConfig
 
 
 def _read_yaml(path: Path) -> object:
@@ -268,6 +313,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         structure=StructureConfig.model_validate(
             _read_yaml(config_directory / "structure.yaml")
+        ),
+        execution=ExecutionConfig.model_validate(
+            _read_yaml(config_directory / "execution.yaml")
         ),
     )
 

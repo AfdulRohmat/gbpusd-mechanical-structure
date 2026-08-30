@@ -9,9 +9,7 @@ __pycache__/
 htmlcov/
 
 # Shared/local market data and generated research artifacts
-data/raw/
-data/interim/
-data/processed/
+data
 artifacts/
 reports/generated/
 

@@ -9,13 +9,15 @@ instrument:
 data:
   root_environment_variable: GBPUSD_SHARED_DATA_ROOT
   local_fallback: data
-  canonical_m5_glob: processed/exness/m5_monthly/symbol=GBPUSD/year=*/m5-*.parquet
-  fundamental_directory: reference/fundamentals
+  price_source: histdata_bid_ask
+  source_role: temporary_development_proxy
+  canonical_m5_glob: processed/m5_monthly/symbol=GBPUSD/year=*/m5-*.parquet
+  fundamental_directory: reference
   timezone: UTC
 
 periods:
   research_start: "2024-01-01"
-  research_end: "2026-08-01"
+  research_end: "2026-01-01"
   construction_end: "2025-01-01"
   replication_end: "2026-01-01"
   # A genuine forward lockbox begins only after the mechanical definitions freeze.
