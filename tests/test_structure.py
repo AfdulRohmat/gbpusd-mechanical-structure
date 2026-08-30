@@ -10,6 +10,7 @@ from gbpusd_structure.structure import (
     build_support_resistance_zones,
     label_fair_value_gaps,
     label_structure_breaks,
+    label_structure_state_machine,
     label_swings,
 )
 
@@ -56,6 +57,24 @@ def structure_bars(
     return frame
 
 
+def confirmed_swing(
+    event_id: str,
+    event_type: str,
+    confirmation_index: int,
+    price: float,
+    relationship: str,
+) -> dict[str, object]:
+    return {
+        "event_id": event_id,
+        "event_type": event_type,
+        "confirmation_index": confirmation_index,
+        "ambiguous_equal": False,
+        "price": price,
+        "bar_id": event_id,
+        "structural_relationship": relationship,
+    }
+
+
 def test_atr_uses_only_current_and_prior_completed_bars() -> None:
     bars = structure_bars(
         [1.1010, 1.1020, 1.1030, 1.1040],
@@ -89,18 +108,33 @@ def test_swing_is_available_only_after_right_side_confirmation() -> None:
     assert pivot["available_at"] > pivot["event_at"]
 
 
-def test_near_equal_swing_is_explicitly_ambiguous() -> None:
+def test_near_equal_swings_are_eqh_relationship_not_ambiguity() -> None:
     bars = structure_bars(
-        [1.1000, 1.1010, 1.10105, 1.1005, 1.1000],
-        [1.0980, 1.0985, 1.0990, 1.0987, 1.0982],
+        [1.1000, 1.1005, 1.1010, 1.1004, 1.1003, 1.10105, 1.1002, 1.1001],
+        [1.0980, 1.0985, 1.0990, 1.0987, 1.0982, 1.0991, 1.0984, 1.0981],
     )
     swings = label_swings(bars, CONFIG, pip_size=0.0001)
     pivot = swings[
-        (swings["event_type"] == "swing_high") & (swings["pivot_index"] == 2)
+        (swings["event_type"] == "swing_high") & (swings["pivot_index"] == 5)
     ].iloc[0]
 
-    assert bool(pivot["ambiguous_equal"])
-    assert pivot["extreme_margin_pips"] == pytest.approx(0.5)
+    assert not bool(pivot["ambiguous_equal"])
+    assert pivot["structural_relationship"] == "EQH"
+    assert pivot["relationship_delta_pips"] == pytest.approx(0.5)
+
+
+def test_exact_high_plateau_selects_rightmost_member() -> None:
+    bars = structure_bars(
+        [1.1000, 1.1005, 1.1010, 1.1010, 1.1004, 1.1000],
+        [1.0980, 1.0985, 1.0990, 1.0990, 1.0987, 1.0982],
+    )
+    swings = label_swings(bars, CONFIG, pip_size=0.0001)
+    highs = swings[swings["event_type"] == "swing_high"]
+
+    assert highs["pivot_index"].tolist() == [3]
+    assert bool(highs.iloc[0]["resolved_plateau"])
+    assert highs.iloc[0]["plateau_size"] == 2
+    assert highs.iloc[0]["extreme_margin_pips"] == pytest.approx(0)
 
 
 def test_breaks_distinguish_bos_and_choch_from_prior_regime() -> None:
@@ -112,38 +146,10 @@ def test_breaks_distinguish_bos_and_choch_from_prior_regime() -> None:
     )
     swings = pd.DataFrame(
         [
-            {
-                "event_id": "h1",
-                "event_type": "swing_high",
-                "confirmation_index": 0,
-                "ambiguous_equal": False,
-                "price": 1.08,
-                "bar_id": "h1",
-            },
-            {
-                "event_id": "l1",
-                "event_type": "swing_low",
-                "confirmation_index": 0,
-                "ambiguous_equal": False,
-                "price": 1.03,
-                "bar_id": "l1",
-            },
-            {
-                "event_id": "h2",
-                "event_type": "swing_high",
-                "confirmation_index": 1,
-                "ambiguous_equal": False,
-                "price": 1.09,
-                "bar_id": "h2",
-            },
-            {
-                "event_id": "l2",
-                "event_type": "swing_low",
-                "confirmation_index": 1,
-                "ambiguous_equal": False,
-                "price": 1.04,
-                "bar_id": "l2",
-            },
+            confirmed_swing("h1", "swing_high", 0, 1.08, "H0"),
+            confirmed_swing("l1", "swing_low", 0, 1.03, "L0"),
+            confirmed_swing("h2", "swing_high", 1, 1.09, "HH"),
+            confirmed_swing("l2", "swing_low", 1, 1.04, "HL"),
         ]
     )
     events = label_structure_breaks(
@@ -158,7 +164,41 @@ def test_breaks_distinguish_bos_and_choch_from_prior_regime() -> None:
         ["bos", "up"],
         ["choch", "down"],
     ]
+    assert events["regime_after"].tolist() == ["bullish", "transition"]
     assert (events["available_at"] > events["event_at"]).all()
+
+
+def test_choch_requires_both_new_relationships_before_opposite_regime() -> None:
+    bars = structure_bars(
+        [1.08, 1.09, 1.13, 1.07, 1.07, 1.06],
+        [1.03, 1.04, 1.08, 0.98, 1.00, 0.98],
+        opens=[1.05, 1.06, 1.08, 1.06, 1.04, 1.01],
+        closes=[1.05, 1.06, 1.12, 0.99, 1.05, 1.00],
+    )
+    swings = pd.DataFrame(
+        [
+            confirmed_swing("h1", "swing_high", 0, 1.08, "H0"),
+            confirmed_swing("l1", "swing_low", 0, 1.03, "L0"),
+            confirmed_swing("h2", "swing_high", 1, 1.09, "HH"),
+            confirmed_swing("l2", "swing_low", 1, 1.04, "HL"),
+            confirmed_swing("h3", "swing_high", 4, 1.07, "LH"),
+            confirmed_swing("l3", "swing_low", 5, 0.98, "LL"),
+        ]
+    )
+    _, contexts = label_structure_state_machine(
+        bars,
+        swings,
+        CONFIG,
+        pip_size=0.0001,
+        break_buffer_atr=0,
+    )
+
+    assert contexts["state"].tolist() == [
+        "undetermined",
+        "bullish",
+        "transition",
+        "bearish",
+    ]
 
 
 def test_fvg_records_point_in_time_creation_and_later_full_fill() -> None:
@@ -177,6 +217,19 @@ def test_fvg_records_point_in_time_creation_and_later_full_fill() -> None:
     assert event["partial_fill_at"] == bars.loc[3, "available_at"]
     assert event["full_fill_at"] == bars.loc[4, "available_at"]
     assert event["status"] == "filled"
+
+
+def test_daily_structure_events_are_not_entry_triggers() -> None:
+    bars = structure_bars(
+        [1.1000, 1.1010, 1.1030, 1.1020, 1.1010],
+        [1.0990, 1.0995, 1.1010, 1.1005, 1.0990],
+        timeframe="1D",
+    )
+    gaps = label_fair_value_gaps(bars, CONFIG, minimum_size_atr=0)
+    swings = label_swings(bars, CONFIG, pip_size=0.0001)
+
+    assert not gaps["entry_trigger_eligible"].any()
+    assert not swings["entry_trigger_eligible"].any()
 
 
 def test_sr_zone_becomes_active_only_after_second_confirmed_touch() -> None:

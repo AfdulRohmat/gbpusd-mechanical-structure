@@ -57,13 +57,20 @@ def label_swings(
     *,
     pip_size: float,
     right_bars: int | None = None,
+    relationship_tolerance_pips: float | None = None,
 ) -> pd.DataFrame:
-    """Label strict and equal-price-ambiguous causal pivot highs/lows."""
+    """Label causal pivots and their HH/HL/LH/LL/EQ relationships."""
 
     left = config.swings.left_bars
-    right = right_bars or config.swings.right_bars
-    tolerance = config.swings.equal_price_tolerance_pips * pip_size
+    right = config.swings.right_bars if right_bars is None else right_bars
+    tolerance_pips = (
+        config.swings.equal_price_tolerance_pips
+        if relationship_tolerance_pips is None
+        else relationship_tolerance_pips
+    )
+    tolerance = tolerance_pips * pip_size
     records: list[dict[str, Any]] = []
+    previous_by_kind: dict[str, dict[str, Any]] = {}
     frame = bars.reset_index(drop=True)
     for index in range(left, len(frame) - right):
         window = frame.iloc[index - left : index + right + 1]
@@ -77,91 +84,131 @@ def label_swings(
             ]
         )
         confirmation = frame.iloc[index + right]
-        definitions = (
-            (
-                "high",
-                "up",
-                float(candidate["mid_high"]),
-                float(neighbours["mid_high"].max()),
-            ),
-            (
-                "low",
-                "down",
-                float(candidate["mid_low"]),
-                float(neighbours["mid_low"].min()),
-            ),
-        )
-        for kind, direction, price, neighbour_extreme in definitions:
+        definitions = (("high", "up"), ("low", "down"))
+        for kind, direction in definitions:
+            column = f"mid_{kind}"
+            values = window[column].to_numpy(dtype="float64")
+            price = float(candidate[column])
+            extreme = float(values.max() if kind == "high" else values.min())
+            plateau_positions = np.flatnonzero(
+                np.isclose(values, extreme, rtol=0, atol=1e-12)
+            )
+            if not len(plateau_positions) or plateau_positions[-1] != left:
+                continue
+            neighbour_extreme = (
+                float(neighbours[column].max())
+                if kind == "high"
+                else float(neighbours[column].min())
+            )
             margin = (
                 price - neighbour_extreme
                 if kind == "high"
                 else neighbour_extreme - price
             )
-            is_local_extreme = margin >= -1e-12
-            if not is_local_extreme:
-                continue
-            ambiguous = margin <= tolerance + 1e-12
             event_at = candidate["timestamp"]
             available_at = confirmation["available_at"]
-            records.append(
-                {
-                    "event_id": (
-                        f"swing:{candidate['timeframe']}:{kind}:"
-                        f"{event_at.isoformat()}:r{right}"
-                    ),
-                    "symbol": "GBPUSD",
-                    "timeframe": candidate["timeframe"],
-                    "event_type": f"swing_{kind}",
-                    "event_at": event_at,
-                    "available_at": available_at,
-                    "direction": direction,
-                    "price": price,
-                    "atr": float(candidate["atr"]),
-                    "ambiguous_equal": ambiguous,
-                    "extreme_margin_pips": margin / pip_size,
-                    "pivot_index": index,
-                    "confirmation_index": index + right,
-                    "bar_id": candidate["bar_id"],
-                    "confirmation_bar_id": confirmation["bar_id"],
-                    "source_bar_ids": _json_bar_ids(window["bar_id"]),
-                    "confirmation_delay_bars": right,
-                    "definition_version": (
-                        f"swing-l{left}-r{right}-"
-                        f"tol{config.swings.equal_price_tolerance_pips:g}pip"
-                    ),
-                }
+            event_id = (
+                f"swing:{candidate['timeframe']}:{kind}:"
+                f"{event_at.isoformat()}:r{right}"
             )
+            previous = previous_by_kind.get(kind)
+            delta = None if previous is None else price - previous["price"]
+            if previous is None:
+                relationship = "H0" if kind == "high" else "L0"
+            elif kind == "high":
+                relationship = (
+                    "HH"
+                    if delta > tolerance
+                    else "LH"
+                    if delta < -tolerance
+                    else "EQH"
+                )
+            else:
+                relationship = (
+                    "HL"
+                    if delta > tolerance
+                    else "LL"
+                    if delta < -tolerance
+                    else "EQL"
+                )
+            record = {
+                "event_id": event_id,
+                "symbol": "GBPUSD",
+                "timeframe": candidate["timeframe"],
+                "event_type": f"swing_{kind}",
+                "event_at": event_at,
+                "available_at": available_at,
+                "direction": direction,
+                "price": price,
+                "atr": float(candidate["atr"]),
+                "structural_relationship": relationship,
+                "relationship_delta_pips": (
+                    None if delta is None else delta / pip_size
+                ),
+                "relationship_tolerance_pips": tolerance_pips,
+                "previous_same_side_swing_id": (
+                    None if previous is None else previous["event_id"]
+                ),
+                "ambiguous_equal": False,
+                "resolved_plateau": len(plateau_positions) > 1,
+                "plateau_size": len(plateau_positions),
+                "extreme_margin_pips": margin / pip_size,
+                "pivot_index": index,
+                "confirmation_index": index + right,
+                "bar_id": candidate["bar_id"],
+                "confirmation_bar_id": confirmation["bar_id"],
+                "source_bar_ids": _json_bar_ids(window["bar_id"]),
+                "confirmation_delay_bars": right,
+                "entry_trigger_eligible": not (
+                    candidate["timeframe"] == "1D"
+                    and not config.context.daily_entry_trigger_enabled
+                ),
+                "definition_version": (
+                    f"swing-l{left}-r{right}-eq{tolerance_pips:g}pip-rightmost"
+                ),
+            }
+            records.append(record)
+            previous_by_kind[kind] = record
     return pd.DataFrame.from_records(records)
 
 
 def _sequence_regime(
-    highs: list[dict[str, Any]],
-    lows: list[dict[str, Any]],
-    tolerance: float,
-) -> str | None:
-    if len(highs) < 2 or len(lows) < 2:
-        return None
-    high_delta = highs[-1]["price"] - highs[-2]["price"]
-    low_delta = lows[-1]["price"] - lows[-2]["price"]
-    if high_delta > tolerance and low_delta > tolerance:
+    high: dict[str, Any] | None,
+    low: dict[str, Any] | None,
+    reset_index: int | None,
+) -> str:
+    if high is None or low is None:
+        return "undetermined"
+    if reset_index is not None and (
+        high["confirmation_index"] <= reset_index
+        or low["confirmation_index"] <= reset_index
+    ):
+        return "transition"
+    high_relation = high["structural_relationship"]
+    low_relation = low["structural_relationship"]
+    if high_relation == "HH" and low_relation == "HL":
         return "bullish"
-    if high_delta < -tolerance and low_delta < -tolerance:
+    if high_relation == "LH" and low_relation == "LL":
         return "bearish"
-    return None
+    if high_relation == "EQH" and low_relation == "EQL":
+        return "balance"
+    if high_relation in {"H0", None} or low_relation in {"L0", None}:
+        return "undetermined"
+    return "transition"
 
 
-def label_structure_breaks(
+def label_structure_state_machine(
     bars: pd.DataFrame,
     swings: pd.DataFrame,
     config: StructureConfig,
     *,
     pip_size: float,
     break_buffer_atr: float | None = None,
-) -> pd.DataFrame:
-    """Classify close-confirmed BOS, CHoCH, and unclassified breaks."""
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return causal break events and context-state change snapshots."""
 
     if swings.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
     buffer_ratio = (
         config.breaks.minimum_buffer_atr
         if break_buffer_atr is None
@@ -172,42 +219,86 @@ def label_structure_breaks(
     for row in confirmed.to_dict("records"):
         by_confirmation[int(row["confirmation_index"])].append(row)
 
-    highs: list[dict[str, Any]] = []
-    lows: list[dict[str, Any]] = []
+    latest_high: dict[str, Any] | None = None
+    latest_low: dict[str, Any] | None = None
     active_high: dict[str, Any] | None = None
     active_low: dict[str, Any] | None = None
-    regime = "neutral"
+    protected_high: dict[str, Any] | None = None
+    protected_low: dict[str, Any] | None = None
+    regime = "undetermined"
+    reset_index: int | None = None
     records: list[dict[str, Any]] = []
-    tolerance = config.swings.equal_price_tolerance_pips * pip_size
+    context_records: list[dict[str, Any]] = []
+    context_initialized = False
 
     for index, bar in bars.reset_index(drop=True).iterrows():
-        for swing in by_confirmation.get(index, []):
+        regime_at_bar_open = regime
+        confirmed_now = by_confirmation.get(index, [])
+        for swing in confirmed_now:
             if swing["event_type"] == "swing_high":
-                highs.append(swing)
+                latest_high = swing
                 active_high = swing
             else:
-                lows.append(swing)
+                latest_low = swing
                 active_low = swing
-        inferred = _sequence_regime(highs, lows, tolerance)
-        if inferred is not None:
-            regime = inferred
+        if confirmed_now:
+            regime = _sequence_regime(latest_high, latest_low, reset_index)
+            if regime == "bullish" and latest_low is not None:
+                protected_low = latest_low
+                protected_high = None
+            elif regime == "bearish" and latest_high is not None:
+                protected_high = latest_high
+                protected_low = None
+            else:
+                protected_high = None
+                protected_low = None
         if not bool(bar["structure_eligible"]) or pd.isna(bar["atr"]):
             continue
 
-        candidates: list[tuple[str, dict[str, Any]]] = []
+        candidates: list[tuple[str, dict[str, Any], str]] = []
         buffer = float(bar["atr"]) * buffer_ratio
         close = float(bar["mid_close"])
-        if active_high is not None and close > active_high["price"] + buffer:
-            candidates.append(("up", active_high))
-        if active_low is not None and close < active_low["price"] - buffer:
-            candidates.append(("down", active_low))
-        for direction, source_swing in candidates:
-            if regime == "bullish":
-                event_type = "bos" if direction == "up" else "choch"
-            elif regime == "bearish":
-                event_type = "bos" if direction == "down" else "choch"
-            else:
-                event_type = "unclassified_break"
+        if regime == "bullish":
+            if active_high is not None and close > active_high["price"] + buffer:
+                candidates.append(("up", active_high, "continuation_high"))
+            if protected_low is not None and close < protected_low["price"] - buffer:
+                candidates.append(("down", protected_low, "protected_low"))
+        elif regime == "bearish":
+            if active_low is not None and close < active_low["price"] - buffer:
+                candidates.append(("down", active_low, "continuation_low"))
+            if protected_high is not None and close > protected_high["price"] + buffer:
+                candidates.append(("up", protected_high, "protected_high"))
+        else:
+            if active_high is not None and close > active_high["price"] + buffer:
+                candidates.append(("up", active_high, "active_high"))
+            if active_low is not None and close < active_low["price"] - buffer:
+                candidates.append(("down", active_low, "active_low"))
+        context_cause = "swing_confirmation" if confirmed_now else "unchanged"
+        for direction, source_swing, level_role in candidates:
+            regime_before = regime
+            continuation = (
+                (regime == "bullish" and direction == "up")
+                or (regime == "bearish" and direction == "down")
+            )
+            opposing_protected_break = level_role in {
+                "protected_low",
+                "protected_high",
+            }
+            event_type = (
+                "bos"
+                if continuation
+                else "choch"
+                if opposing_protected_break
+                else "unclassified_break"
+            )
+            if event_type == "choch":
+                regime = "transition"
+                reset_index = index
+                context_cause = "choch"
+                if direction == "up":
+                    protected_high = None
+                else:
+                    protected_low = None
             records.append(
                 {
                     "event_id": (
@@ -220,8 +311,13 @@ def label_structure_breaks(
                     "event_at": bar["timestamp"],
                     "available_at": bar["available_at"],
                     "direction": direction,
-                    "regime_before": regime,
+                    "regime_before": regime_before,
+                    "regime_after": regime,
+                    "broken_level_role": level_role,
                     "broken_swing_id": source_swing["event_id"],
+                    "broken_swing_relationship": source_swing[
+                        "structural_relationship"
+                    ],
                     "broken_level": source_swing["price"],
                     "close": close,
                     "atr": float(bar["atr"]),
@@ -236,6 +332,10 @@ def label_structure_breaks(
                         [source_swing["bar_id"], bar["bar_id"]],
                         separators=(",", ":"),
                     ),
+                    "entry_trigger_eligible": not (
+                        bar["timeframe"] == "1D"
+                        and not config.context.daily_entry_trigger_enabled
+                    ),
                     "definition_version": f"break-close-buffer{buffer_ratio:g}atr",
                 }
             )
@@ -243,9 +343,82 @@ def label_structure_breaks(
                 active_high = None
             else:
                 active_low = None
-            if event_type == "choch":
-                regime = "bullish" if direction == "up" else "bearish"
-    return pd.DataFrame.from_records(records)
+        if not context_initialized or regime != regime_at_bar_open:
+            context_records.append(
+                {
+                    "event_id": (
+                        f"context:{bar['timeframe']}:"
+                        f"{bar['timestamp'].isoformat()}:{regime}"
+                    ),
+                    "symbol": "GBPUSD",
+                    "timeframe": bar["timeframe"],
+                    "event_type": "context_state_change",
+                    "event_at": bar["timestamp"],
+                    "available_at": bar["available_at"],
+                    "previous_state": (
+                        None if not context_initialized else regime_at_bar_open
+                    ),
+                    "state": regime,
+                    "cause": (
+                        "initialization" if not context_initialized else context_cause
+                    ),
+                    "latest_high_swing_id": (
+                        None if latest_high is None else latest_high["event_id"]
+                    ),
+                    "latest_low_swing_id": (
+                        None if latest_low is None else latest_low["event_id"]
+                    ),
+                    "protected_high_swing_id": (
+                        None if protected_high is None else protected_high["event_id"]
+                    ),
+                    "protected_low_swing_id": (
+                        None if protected_low is None else protected_low["event_id"]
+                    ),
+                    "context_role": (
+                        config.context.daily_role
+                        if bar["timeframe"] == "1D"
+                        else "structure_context"
+                    ),
+                    "entry_trigger_eligible": not (
+                        bar["timeframe"] == "1D"
+                        and not config.context.daily_entry_trigger_enabled
+                    ),
+                    "bar_id": bar["bar_id"],
+                    "source_bar_ids": json.dumps(
+                        [
+                            *[swing["bar_id"] for swing in confirmed_now],
+                            bar["bar_id"],
+                        ],
+                        separators=(",", ":"),
+                    ),
+                    "definition_version": "context-paired-swings-protected-v1",
+                }
+            )
+            context_initialized = True
+    return (
+        pd.DataFrame.from_records(records),
+        pd.DataFrame.from_records(context_records),
+    )
+
+
+def label_structure_breaks(
+    bars: pd.DataFrame,
+    swings: pd.DataFrame,
+    config: StructureConfig,
+    *,
+    pip_size: float,
+    break_buffer_atr: float | None = None,
+) -> pd.DataFrame:
+    """Classify close-confirmed BOS, CHoCH, and unclassified breaks."""
+
+    events, _ = label_structure_state_machine(
+        bars,
+        swings,
+        config,
+        pip_size=pip_size,
+        break_buffer_atr=break_buffer_atr,
+    )
+    return events
 
 
 def label_fair_value_gaps(
@@ -346,6 +519,10 @@ def label_fair_value_gaps(
                     "source_bar_ids": json.dumps(
                         [first["bar_id"], second["bar_id"], third["bar_id"]],
                         separators=(",", ":"),
+                    ),
+                    "entry_trigger_eligible": not (
+                        third["timeframe"] == "1D"
+                        and not config.context.daily_entry_trigger_enabled
                     ),
                     "definition_version": f"fvg-wick-min{minimum_ratio:g}atr",
                 }

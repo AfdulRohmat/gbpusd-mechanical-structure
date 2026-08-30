@@ -2,6 +2,8 @@ swings:
   left_bars: 2
   right_bars: 2
   equal_price_tolerance_pips: 1.0
+  plateau_tie_break: rightmost
+  near_equal_handling: structural_relationship
 
 volatility:
   atr_period: 14
@@ -11,6 +13,13 @@ breaks:
   confirmation: close
   minimum_buffer_atr: 0.05
   displacement_minimum_body_atr: 0.80
+  regime_model: paired_swing_relationships
+  protected_swing_model: latest_confirmed_opposing_swing
+  choch_result_state: transition
+
+context:
+  daily_role: regime_only
+  daily_entry_trigger_enabled: false
 
 fair_value_gap:
   geometry: three_candle_wick_gap

@@ -20,6 +20,7 @@ from gbpusd_structure.structure import (
     eligible_structure_bars,
     label_fair_value_gaps,
     label_structure_breaks,
+    label_structure_state_machine,
     label_swings,
 )
 from gbpusd_structure.timeframes import build_timeframes
@@ -109,12 +110,14 @@ def _primary_labels(
     dict[str, pd.DataFrame],
     dict[str, pd.DataFrame],
     dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
 ]:
     swings: dict[str, pd.DataFrame] = {}
     breaks: dict[str, pd.DataFrame] = {}
     gaps: dict[str, pd.DataFrame] = {}
     zones: dict[str, pd.DataFrame] = {}
     snapshots: dict[str, pd.DataFrame] = {}
+    contexts: dict[str, pd.DataFrame] = {}
     for timeframe in TIMEFRAME_ORDER:
         bars = bars_by_timeframe[timeframe]
         swing = label_swings(
@@ -123,7 +126,7 @@ def _primary_labels(
             pip_size=config.research.instrument.pip_size,
         )
         swings[timeframe] = swing
-        breaks[timeframe] = label_structure_breaks(
+        breaks[timeframe], contexts[timeframe] = label_structure_state_machine(
             bars,
             swing,
             config.structure,
@@ -138,7 +141,7 @@ def _primary_labels(
                     config.structure,
                 )
             )
-    return swings, breaks, gaps, zones, snapshots
+    return swings, breaks, gaps, zones, snapshots, contexts
 
 
 def _sensitivity_audit(
@@ -186,6 +189,41 @@ def _sensitivity_audit(
                         "jaccard_agreement": _jaccard(swing_primary_keys, keys),
                     }
                 )
+
+        relationship_primary_keys = _event_keys(
+            primary_swings[timeframe],
+            ["event_at", "direction", "structural_relationship"],
+        )
+        for tolerance_pips in (0.5, 1.5):
+            variant = label_swings(
+                bars,
+                structure,
+                pip_size=pip_size,
+                relationship_tolerance_pips=tolerance_pips,
+            )
+            keys = _event_keys(
+                variant,
+                ["event_at", "direction", "structural_relationship"],
+            )
+            rows.append(
+                {
+                    "concept": "swing_relationship",
+                    "timeframe": timeframe,
+                    "parameter": "equality_tolerance_pips",
+                    "primary_value": (
+                        structure.swings.equal_price_tolerance_pips
+                    ),
+                    "comparison_value": tolerance_pips,
+                    "primary_count": len(relationship_primary_keys),
+                    "comparison_count": len(keys),
+                    "intersection_count": len(
+                        relationship_primary_keys & keys
+                    ),
+                    "jaccard_agreement": _jaccard(
+                        relationship_primary_keys, keys
+                    ),
+                }
+            )
 
         break_primary_keys = _event_keys(
             primary_breaks[timeframe],
@@ -370,6 +408,8 @@ def _point_in_time_failures(
 
 
 def _transition_counts(events: pd.DataFrame) -> dict[str, int]:
+    if events.empty or "event_type" not in events:
+        return {}
     classified = events[events["event_type"].isin(["bos", "choch"])].copy()
     if len(classified) < 2:
         return {}
@@ -388,6 +428,7 @@ def _build_summary(
     gaps: dict[str, pd.DataFrame],
     zones: dict[str, pd.DataFrame],
     snapshots: dict[str, pd.DataFrame],
+    contexts: dict[str, pd.DataFrame],
     annual: pd.DataFrame,
     sensitivity: pd.DataFrame,
     failures: list[str],
@@ -399,6 +440,7 @@ def _build_summary(
         swing = swings[timeframe]
         break_events = breaks[timeframe]
         gap = gaps[timeframe]
+        context = contexts[timeframe]
         ambiguous_fraction = (
             float(swing["ambiguous_equal"].mean()) if len(swing) else None
         )
@@ -426,6 +468,13 @@ def _build_summary(
                 "swing_count": len(swing),
                 "ambiguous_swing_count": int(swing["ambiguous_equal"].sum()),
                 "ambiguous_swing_fraction": ambiguous_fraction,
+                "resolved_plateau_count": int(swing["resolved_plateau"].sum()),
+                "swing_relationship_counts": {
+                    str(key): int(value)
+                    for key, value in swing["structural_relationship"]
+                    .value_counts()
+                    .items()
+                },
                 "confirmation_delay_bars": _describe(
                     swing["confirmation_delay_bars"]
                 ),
@@ -441,6 +490,15 @@ def _build_summary(
                     else None
                 ),
                 "break_transition_counts": _transition_counts(break_events),
+                "context_state_change_count": len(context),
+                "context_state_counts": {
+                    str(key): int(value)
+                    for key, value in context["state"].value_counts().items()
+                },
+                "entry_trigger_eligible": not (
+                    timeframe == "1D"
+                    and not config.structure.context.daily_entry_trigger_enabled
+                ),
                 "fvg_count": len(gap),
                 "fvg_status_counts": {
                     str(key): int(value)
@@ -504,6 +562,13 @@ def _build_summary(
             }
         )
     for row in _records(annual):
+        daily_context_only = (
+            row["timeframe"] == "1D"
+            and row["concept"] in {"structure_break", "fair_value_gap"}
+            and not config.structure.context.daily_entry_trigger_enabled
+        )
+        if daily_context_only:
+            continue
         gates.append(
             {
                 "gate": "annual_event_count",
@@ -542,7 +607,7 @@ def _build_summary(
     )
     failed = [gate for gate in gates if not gate["passed"]]
     return {
-        "phase": 0,
+        "phase": "0.1",
         "purpose": "definition_audit_without_trading_or_pnl",
         "status": "pass" if not failed else "fail",
         "timeframes": timeframe_rows,
@@ -570,24 +635,26 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
     )
 
 
-def run_phase0(
+def run_phase0_1(
     project_root: Path,
     data_root: Path,
     *,
     artifact_root: Path | None = None,
 ) -> Phase0Result:
-    """Run the registered Phase-0 audit and persist reproducible artifacts."""
+    """Run the registered Phase-0.1 audit and persist reproducible artifacts."""
 
     config = load_project_config(project_root / "config")
     input_paths = canonical_m5_paths(data_root, config.research)
     fingerprint, input_hashes = _fingerprint(project_root, input_paths)
-    artifact_directory = (artifact_root or project_root / "artifacts" / "phase0")
+    artifact_directory = (
+        artifact_root or project_root / "artifacts" / "phase0_1"
+    )
     artifact_directory = artifact_directory / fingerprint
     artifact_directory.mkdir(parents=True, exist_ok=True)
 
     m5 = load_canonical_m5(data_root, config.research)
     bars_by_timeframe = _prepare_bars(m5, config)
-    swings, breaks, gaps, zones, snapshots = _primary_labels(
+    swings, breaks, gaps, zones, snapshots, contexts = _primary_labels(
         bars_by_timeframe, config
     )
     sensitivity = _sensitivity_audit(
@@ -616,6 +683,7 @@ def run_phase0(
         "structure_break": breaks,
         "fair_value_gap": gaps,
         "zone_snapshot": snapshots,
+        "context_state": contexts,
     }
     failures = _point_in_time_failures(
         bars_by_timeframe, point_in_time_collections
@@ -627,6 +695,7 @@ def run_phase0(
         gaps,
         zones,
         snapshots,
+        contexts,
         annual,
         sensitivity,
         failures,
@@ -645,6 +714,7 @@ def run_phase0(
         "fair-value-gaps": _concat(gaps),
         "support-resistance-zones": _concat(zones),
         "support-resistance-snapshots": _concat(snapshots),
+        "context-states": _concat(contexts),
     }
     for name, frame in tables.items():
         frame.to_parquet(
@@ -663,7 +733,7 @@ def run_phase0(
             continue
         artifact_hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {
-        "phase": 0,
+        "phase": "0.1",
         "fingerprint": fingerprint,
         "generated_at": datetime.now(UTC).isoformat(),
         "research_start": config.research.periods.research_start.isoformat(),

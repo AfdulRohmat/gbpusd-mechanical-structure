@@ -1,6 +1,6 @@
 # Technical Plan — Phase 0.1 Structural State Refinement
 
-**Status:** preregistered before the Phase-0.1 audit  
+**Status:** preregistered before audit and executed; see `PHASE0_1_RESULTS.md`
 **Purpose:** correct swing semantics and structural state without inspecting P&L
 
 ## 1. Why this refinement exists

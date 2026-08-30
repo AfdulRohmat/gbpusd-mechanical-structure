@@ -23,6 +23,9 @@ def test_checked_in_configuration_is_valid() -> None:
     assert config.sessions.sessions["london"].timezone == "Europe/London"
     assert config.fundamental.usage.role == "context_filter"
     assert config.structure.swings.right_bars == 2
+    assert config.structure.swings.near_equal_handling == "structural_relationship"
+    assert config.structure.breaks.choch_result_state == "transition"
+    assert config.structure.context.daily_entry_trigger_enabled is False
     assert config.structure.order_block.enabled is False
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)

@@ -188,6 +188,8 @@ class SwingConfig(StrictModel):
     left_bars: int = Field(ge=1)
     right_bars: int = Field(ge=1)
     equal_price_tolerance_pips: float = Field(ge=0)
+    plateau_tie_break: Literal["rightmost"]
+    near_equal_handling: Literal["structural_relationship"]
 
 
 class VolatilityConfig(StrictModel):
@@ -199,6 +201,14 @@ class BreakConfig(StrictModel):
     confirmation: Literal["close"]
     minimum_buffer_atr: float = Field(ge=0)
     displacement_minimum_body_atr: float = Field(gt=0)
+    regime_model: Literal["paired_swing_relationships"]
+    protected_swing_model: Literal["latest_confirmed_opposing_swing"]
+    choch_result_state: Literal["transition"]
+
+
+class StructureContextConfig(StrictModel):
+    daily_role: Literal["regime_only"]
+    daily_entry_trigger_enabled: Literal[False]
 
 
 class FairValueGapConfig(StrictModel):
@@ -244,6 +254,7 @@ class StructureConfig(StrictModel):
     swings: SwingConfig
     volatility: VolatilityConfig
     breaks: BreakConfig
+    context: StructureContextConfig
     fair_value_gap: FairValueGapConfig
     support_resistance: SupportResistanceConfig
     indicators: IndicatorConfig
