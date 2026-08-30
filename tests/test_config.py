@@ -62,6 +62,15 @@ def test_checked_in_configuration_is_valid() -> None:
         2.0,
     )
     assert config.phase1_3.path_measurement.stop_disabled_during_measurement
+    assert config.phase1_4.parent.fingerprint == "90d1e369b427d3d8"
+    assert config.phase1_4.invalidation.buffer_signal_atr == pytest.approx(0.1)
+    assert config.phase1_4.invalidation.distance_filter == "none"
+    assert tuple(item.id for item in config.phase1_4.variants) == (
+        "p3_atr_1_target_2atr",
+        "p3_structure_target_2atr",
+        "p3_structure_target_2r",
+    )
+    assert config.phase1_4.risk.fixed_risk_usd == pytest.approx(30.0)
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

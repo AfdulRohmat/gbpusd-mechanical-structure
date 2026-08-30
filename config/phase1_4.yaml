@@ -1,0 +1,80 @@
+phase: phase1_4_structural_stop_ablation
+status: preregistered_before_structural_stop_returns
+
+parent:
+  branch: phase/01-1-full-session-setups
+  fingerprint: 90d1e369b427d3d8
+  diagnostic_fingerprint: c9475ab43c8aba4a
+  baseline_model: p3_m15_structure
+
+scope:
+  construction_year: 2024
+  replication_year: 2025
+  sessions: [london, new_york]
+  frozen_parent_signals: true
+  maximum_trades_per_session: 1
+  alter_signal_frequency: false
+
+invalidation:
+  timeframe: 15min
+  bos_rule: latest_confirmed_opposing_swing
+  choch_rule: latest_confirmed_opposing_swing_proxy
+  swing_available_by_decision: true
+  swing_pivot_before_decision: true
+  long_level_quote: bid_low
+  short_level_quote: ask_high
+  buffer_signal_atr: 0.10
+  distance_filter: none
+  missing_or_wrong_side_action: audit_failure
+
+variants:
+  - id: p3_atr_1_target_2atr
+    stop: signal_atr_1
+    target: signal_atr_2
+    role: frozen_baseline
+  - id: p3_structure_target_2atr
+    stop: causal_structure_invalidation
+    target: signal_atr_2
+    role: diagnostic_only
+  - id: p3_structure_target_2r
+    stop: causal_structure_invalidation
+    target: structure_risk_2
+    role: strategy_candidate
+
+risk:
+  fixed_risk_usd: 30.0
+  usd_per_pip_per_standard_lot: 10.0
+  lot_quantization_enabled: false
+  risk_denominator: entry_to_stop_before_costs
+  target_r: 2.0
+
+execution:
+  inherit_from_phase1_1: true
+  bracket_anchor: observed_entry_quote_before_slippage
+  primary_slippage_pips_per_side: 0.10
+  stress_slippage_pips_per_side: 0.20
+  commission_pips_per_side: 0.35
+  intrabar_priority: stop_first
+  force_flat_at_session_cutoff: true
+
+construction_gate:
+  candidate: p3_structure_target_2r
+  require_zero_invariant_failures: true
+  require_same_signal_count_as_parent: true
+  require_positive_mean_trade_net_r: true
+  require_profit_factor_above_one: true
+  require_mean_opportunity_improvement_over_parent: true
+  no_qualified_candidate_action: stop_without_replication
+
+replication_gate:
+  require_frozen_selection_file: true
+  require_positive_mean_trade_net_r: true
+  require_profit_factor_above_one: true
+  require_positive_mean_opportunity_net_r: true
+  require_mean_opportunity_improvement_over_parent: true
+  require_positive_expectancy_each_session: true
+  require_positive_expectancy_each_direction: true
+  require_positive_stress_expectancy: true
+  require_opportunity_mean_ci_above_zero: true
+  maximum_best_month_share_of_positive_r: 0.50
+

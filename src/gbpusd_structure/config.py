@@ -838,6 +838,131 @@ class Phase13Config(StrictModel):
         return self
 
 
+class Phase14ParentConfig(StrictModel):
+    branch: Literal["phase/01-1-full-session-setups"]
+    fingerprint: Literal["90d1e369b427d3d8"]
+    diagnostic_fingerprint: Literal["c9475ab43c8aba4a"]
+    baseline_model: Literal["p3_m15_structure"]
+
+
+class Phase14ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    frozen_parent_signals: Literal[True]
+    maximum_trades_per_session: Literal[1]
+    alter_signal_frequency: Literal[False]
+
+
+class Phase14InvalidationConfig(StrictModel):
+    timeframe: Literal["15min"]
+    bos_rule: Literal["latest_confirmed_opposing_swing"]
+    choch_rule: Literal["latest_confirmed_opposing_swing_proxy"]
+    swing_available_by_decision: Literal[True]
+    swing_pivot_before_decision: Literal[True]
+    long_level_quote: Literal["bid_low"]
+    short_level_quote: Literal["ask_high"]
+    buffer_signal_atr: Literal[0.1]
+    distance_filter: Literal["none"]
+    missing_or_wrong_side_action: Literal["audit_failure"]
+
+
+class Phase14VariantConfig(StrictModel):
+    id: Literal[
+        "p3_atr_1_target_2atr",
+        "p3_structure_target_2atr",
+        "p3_structure_target_2r",
+    ]
+    stop: Literal["signal_atr_1", "causal_structure_invalidation"]
+    target: Literal["signal_atr_2", "structure_risk_2"]
+    role: Literal["frozen_baseline", "diagnostic_only", "strategy_candidate"]
+
+
+class Phase14RiskConfig(StrictModel):
+    fixed_risk_usd: Literal[30.0]
+    usd_per_pip_per_standard_lot: Literal[10.0]
+    lot_quantization_enabled: Literal[False]
+    risk_denominator: Literal["entry_to_stop_before_costs"]
+    target_r: Literal[2.0]
+
+
+class Phase14ExecutionConfig(StrictModel):
+    inherit_from_phase1_1: Literal[True]
+    bracket_anchor: Literal["observed_entry_quote_before_slippage"]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    intrabar_priority: Literal["stop_first"]
+    force_flat_at_session_cutoff: Literal[True]
+
+
+class Phase14ConstructionGateConfig(StrictModel):
+    candidate: Literal["p3_structure_target_2r"]
+    require_zero_invariant_failures: Literal[True]
+    require_same_signal_count_as_parent: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_mean_opportunity_improvement_over_parent: Literal[True]
+    no_qualified_candidate_action: Literal["stop_without_replication"]
+
+
+class Phase14ReplicationGateConfig(StrictModel):
+    require_frozen_selection_file: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_mean_opportunity_net_r: Literal[True]
+    require_mean_opportunity_improvement_over_parent: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_positive_stress_expectancy: Literal[True]
+    require_opportunity_mean_ci_above_zero: Literal[True]
+    maximum_best_month_share_of_positive_r: Literal[0.5]
+
+
+class Phase14Config(StrictModel):
+    phase: Literal["phase1_4_structural_stop_ablation"]
+    status: Literal["preregistered_before_structural_stop_returns"]
+    parent: Phase14ParentConfig
+    scope: Phase14ScopeConfig
+    invalidation: Phase14InvalidationConfig
+    variants: tuple[Phase14VariantConfig, ...]
+    risk: Phase14RiskConfig
+    execution: Phase14ExecutionConfig
+    construction_gate: Phase14ConstructionGateConfig
+    replication_gate: Phase14ReplicationGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase14Config:
+        expected = (
+            (
+                "p3_atr_1_target_2atr",
+                "signal_atr_1",
+                "signal_atr_2",
+                "frozen_baseline",
+            ),
+            (
+                "p3_structure_target_2atr",
+                "causal_structure_invalidation",
+                "signal_atr_2",
+                "diagnostic_only",
+            ),
+            (
+                "p3_structure_target_2r",
+                "causal_structure_invalidation",
+                "structure_risk_2",
+                "strategy_candidate",
+            ),
+        )
+        actual = tuple(
+            (item.id, item.stop, item.target, item.role) for item in self.variants
+        )
+        if actual != expected:
+            raise ValueError("Phase 1.4 variants must remain frozen")
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1.4 sessions must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -849,6 +974,7 @@ class ProjectConfig(StrictModel):
     phase1_2: Phase12Config
     phase1_2_coverage_selection: Phase12CoverageSelectionConfig
     phase1_3: Phase13Config
+    phase1_4: Phase14Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -895,6 +1021,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase1_3=Phase13Config.model_validate(
             _read_yaml(config_directory / "phase1_3.yaml")
+        ),
+        phase1_4=Phase14Config.model_validate(
+            _read_yaml(config_directory / "phase1_4.yaml")
         ),
     )
 
