@@ -168,3 +168,6 @@ the session cutoff and does not select a new stop or strategy:
 
 The frozen diagnostic contract is documented in
 [`docs/TECHNICAL_PLAN_PHASE1_3.md`](docs/TECHNICAL_PLAN_PHASE1_3.md).
+The completed audit is recorded in
+[`docs/PHASE1_3_RESULTS.md`](docs/PHASE1_3_RESULTS.md), with official local
+evidence under `artifacts/phase1_3/c9475ab43c8aba4a/`.
