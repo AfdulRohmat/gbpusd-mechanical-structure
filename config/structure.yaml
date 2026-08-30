@@ -1,0 +1,30 @@
+swings:
+  left_bars: 2
+  right_bars: 2
+  equal_price_tolerance_pips: 1.0
+
+breaks:
+  confirmation: close
+  minimum_buffer_atr: 0.05
+  displacement_minimum_body_atr: 0.80
+
+fair_value_gap:
+  geometry: three_candle_wick_gap
+  minimum_size_atr: 0.10
+  maximum_age_bars: 24
+  invalidation: full_fill
+
+support_resistance:
+  source_timeframes: [4H, 1H]
+  cluster_tolerance_atr: 0.20
+  minimum_confirmed_touches: 2
+  maximum_age_bars: 500
+
+indicators:
+  ema_periods: [20, 50, 200]
+  rsi_period: 14
+  primary_signal_enabled: false
+
+order_block:
+  enabled: false
+  status: deferred_pending_operational_definition

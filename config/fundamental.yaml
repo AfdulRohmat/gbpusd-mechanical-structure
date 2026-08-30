@@ -1,0 +1,24 @@
+scoring:
+  components: [policy, inflation, labor, yield_expectation]
+  primary_weights:
+    policy: 1
+    inflation: 1
+    labor: 1
+    yield_expectation: 1
+  primary_bias_threshold: 2
+  impact_weighted_sensitivity:
+    policy: 3
+    inflation: 2
+    labor: 2
+    yield_expectation: 1
+  impact_weighted_bias_threshold: 3
+
+availability:
+  require_point_in_time_release_timestamp: true
+  release_lag_minutes: 0
+  yield_observation_lag_days: 1
+
+usage:
+  role: context_filter
+  allow_standalone_entry: false
+  missing_bias_action: neutral

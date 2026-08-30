@@ -1,0 +1,40 @@
+instrument:
+  symbol: GBPUSD
+  broker: Exness
+  account_type: Raw Spread
+  platform: MT5
+  pip_size: 0.0001
+  price_decimals: 5
+
+data:
+  root_environment_variable: GBPUSD_SHARED_DATA_ROOT
+  local_fallback: data
+  canonical_m5_glob: processed/exness/m5_monthly/symbol=GBPUSD/year=*/m5-*.parquet
+  fundamental_directory: reference/fundamentals
+  timezone: UTC
+
+periods:
+  research_start: "2024-01-01"
+  research_end: "2026-08-01"
+  construction_end: "2025-01-01"
+  replication_end: "2026-01-01"
+  # A genuine forward lockbox begins only after the mechanical definitions freeze.
+  future_lockbox_start: "2026-09-01"
+
+timeframes:
+  context: [1D, 4H, 1H]
+  setup: 15min
+  execution: 5min
+  fx_day_boundary_timezone: America/New_York
+  fx_day_boundary: "17:00"
+
+quality:
+  reject_crossed_quotes: true
+  minimum_m5_coverage_ratio: 0.95
+  exclude_weekends: true
+  maximum_spread_pips_warning: 10.0
+
+study:
+  random_seed: 20260901
+  bootstrap_resamples: 10000
+  confidence_level: 0.95

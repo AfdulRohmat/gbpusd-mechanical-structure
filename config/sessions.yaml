@@ -1,0 +1,13 @@
+sessions:
+  london:
+    timezone: Europe/London
+    open: "08:00"
+    observation_minutes: 90
+    management_cutoff: new_york_open
+  new_york:
+    timezone: America/New_York
+    open: "08:00"
+    observation_minutes: 90
+    management_cutoff: fx_day_boundary
+
+entry_days: [Monday, Tuesday, Wednesday, Thursday, Friday]

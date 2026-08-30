@@ -1,0 +1,23 @@
+.DS_Store
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Shared/local market data and generated research artifacts
+data/raw/
+data/interim/
+data/processed/
+artifacts/
+reports/generated/
+
+# Local paths and secrets
+.env
+config/*.local.yaml
+
+# Notebook state
+.ipynb_checkpoints/
