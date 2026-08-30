@@ -1,0 +1,98 @@
+phase: phase1_2_light_filter_ablation
+status: preregistered_before_coverage
+parent:
+  branch: phase/01-1-full-session-setups
+  fingerprint: 90d1e369b427d3d8
+
+scope:
+  baseline_model: p3_m15_structure
+  construction_year: 2024
+  replication_year: 2025
+  sessions: [london, new_york]
+  excluded_posthoc_filters: [session, event_type, local_hour]
+  excluded_features:
+    - order_block
+    - h1_support_resistance
+    - fundamental_bias
+    - ema
+    - rsi
+    - fvg
+
+coverage_screen:
+  returns_access_allowed: false
+  period: construction
+  target_trades_per_month_minimum: 20
+  target_trades_per_month_maximum: 25
+  target_trades_per_year_minimum: 240
+  target_trades_per_year_maximum: 300
+  selection: first_candidate_satisfying_filter_per_session
+  candidates:
+    - id: f1_displacement
+      rules: [displacement]
+    - id: f2_h1_opposition_veto
+      rules: [h1_opposition_veto]
+    - id: f3_h4_opposition_veto
+      rules: [h4_opposition_veto]
+    - id: f4_h1_h4_opposition_veto
+      rules: [h1_opposition_veto, h4_opposition_veto]
+    - id: f5_displacement_h4_veto
+      rules: [displacement, h4_opposition_veto]
+    - id: f6_displacement_h1_h4_veto
+      rules: [displacement, h1_opposition_veto, h4_opposition_veto]
+
+filter_definitions:
+  displacement:
+    source_field: displacement_qualified
+    required_value: true
+    frozen_minimum_body_atr: 0.80
+  h1_opposition_veto:
+    timeframe: 1H
+    long_rejected_state: bearish
+    short_rejected_state: bullish
+    allowed_states: [aligned, transition, balance, undetermined]
+  h4_opposition_veto:
+    timeframe: 4H
+    long_rejected_state: bearish
+    short_rejected_state: bullish
+    allowed_states: [aligned, transition, balance, undetermined]
+
+construction_selection:
+  pnl_access_scope: construction_eligible_filters_only
+  baseline_comparison: p3_m15_structure
+  require_positive_mean_trade_net_r: true
+  require_profit_factor_above_one: true
+  require_mean_opportunity_improvement_over_p3: true
+  winner_objective: highest_mean_opportunity_net_r
+  tie_break_order:
+    - f1_displacement
+    - f2_h1_opposition_veto
+    - f3_h4_opposition_veto
+    - f4_h1_h4_opposition_veto
+    - f5_displacement_h4_veto
+    - f6_displacement_h1_h4_veto
+  maximum_replication_candidates: 1
+  no_qualified_winner_action: stop_without_replication
+
+execution:
+  inherit_from_phase1_1: true
+  stop_atr: 1.0
+  target_r: 2.0
+  primary_slippage_pips_per_side: 0.10
+  stress_slippage_pips_per_side: 0.20
+  commission_pips_per_side: 0.35
+  force_flat_at_session_cutoff: true
+
+replication_gate:
+  require_frozen_selection_file: true
+  required_trade_count_minimum: 240
+  required_trade_count_maximum: 300
+  require_positive_mean_trade_net_r: true
+  require_profit_factor_above_one: true
+  require_positive_mean_opportunity_net_r: true
+  require_mean_opportunity_improvement_over_p3: true
+  require_positive_expectancy_each_session: true
+  require_positive_expectancy_each_direction: true
+  require_positive_stress_expectancy: true
+  require_opportunity_mean_ci_above_zero: true
+  maximum_best_month_share_of_positive_r: 0.50
+
