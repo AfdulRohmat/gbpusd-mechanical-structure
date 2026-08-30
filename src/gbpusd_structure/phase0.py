@@ -14,6 +14,7 @@ import pandas as pd
 
 from gbpusd_structure.config import ProjectConfig, load_project_config
 from gbpusd_structure.data import canonical_m5_paths, load_canonical_m5
+from gbpusd_structure.order_blocks import label_order_blocks
 from gbpusd_structure.structure import (
     add_atr,
     build_support_resistance_zones,
@@ -111,6 +112,8 @@ def _primary_labels(
     dict[str, pd.DataFrame],
     dict[str, pd.DataFrame],
     dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
 ]:
     swings: dict[str, pd.DataFrame] = {}
     breaks: dict[str, pd.DataFrame] = {}
@@ -118,6 +121,8 @@ def _primary_labels(
     zones: dict[str, pd.DataFrame] = {}
     snapshots: dict[str, pd.DataFrame] = {}
     contexts: dict[str, pd.DataFrame] = {}
+    order_blocks: dict[str, pd.DataFrame] = {}
+    order_block_anchors: dict[str, pd.DataFrame] = {}
     for timeframe in TIMEFRAME_ORDER:
         bars = bars_by_timeframe[timeframe]
         swing = label_swings(
@@ -133,6 +138,16 @@ def _primary_labels(
             pip_size=config.research.instrument.pip_size,
         )
         gaps[timeframe] = label_fair_value_gaps(bars, config.structure)
+        if timeframe in config.structure.order_block.source_timeframes:
+            order_blocks[timeframe], order_block_anchors[timeframe] = (
+                label_order_blocks(
+                    bars,
+                    breaks[timeframe],
+                    gaps[timeframe],
+                    config.structure,
+                    pip_size=config.research.instrument.pip_size,
+                )
+            )
         if timeframe in config.structure.support_resistance.source_timeframes:
             zones[timeframe], snapshots[timeframe] = (
                 build_support_resistance_zones(
@@ -141,7 +156,16 @@ def _primary_labels(
                     config.structure,
                 )
             )
-    return swings, breaks, gaps, zones, snapshots, contexts
+    return (
+        swings,
+        breaks,
+        gaps,
+        zones,
+        snapshots,
+        contexts,
+        order_blocks,
+        order_block_anchors,
+    )
 
 
 def _sensitivity_audit(
@@ -320,6 +344,127 @@ def _sensitivity_audit(
     return pd.DataFrame.from_records(rows)
 
 
+def _interval_iou(primary: pd.DataFrame, comparison: pd.DataFrame) -> pd.Series:
+    merged = primary[
+        ["event_id", "lower_bound", "upper_bound"]
+    ].merge(
+        comparison[["event_id", "lower_bound", "upper_bound"]],
+        on="event_id",
+        suffixes=("_primary", "_comparison"),
+        validate="one_to_one",
+    )
+    intersection = (
+        merged[["upper_bound_primary", "upper_bound_comparison"]].min(axis=1)
+        - merged[["lower_bound_primary", "lower_bound_comparison"]].max(axis=1)
+    ).clip(lower=0)
+    union = (
+        merged[["upper_bound_primary", "upper_bound_comparison"]].max(axis=1)
+        - merged[["lower_bound_primary", "lower_bound_comparison"]].min(axis=1)
+    )
+    return intersection / union
+
+
+def _order_block_sensitivity_audit(
+    bars_by_timeframe: dict[str, pd.DataFrame],
+    primary_breaks: dict[str, pd.DataFrame],
+    primary_gaps: dict[str, pd.DataFrame],
+    primary_order_blocks: dict[str, pd.DataFrame],
+    config: ProjectConfig,
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    structure = config.structure
+    pip_size = config.research.instrument.pip_size
+    primary_lookback = structure.order_block.candidate_lookback_bars
+    primary_age = structure.order_block.maximum_age_bars
+    for timeframe in structure.order_block.source_timeframes:
+        bars = bars_by_timeframe[timeframe]
+        primary = primary_order_blocks[timeframe]
+        primary_candidate_keys = _event_keys(
+            primary,
+            ["anchor_break_id", "candidate_bar_id"],
+        )
+        for lookback in (3, 9):
+            variant, _ = label_order_blocks(
+                bars,
+                primary_breaks[timeframe],
+                primary_gaps[timeframe],
+                structure,
+                pip_size=pip_size,
+                candidate_lookback_bars=lookback,
+            )
+            keys = _event_keys(
+                variant,
+                ["anchor_break_id", "candidate_bar_id"],
+            )
+            rows.append(
+                {
+                    "concept": "order_block_candidate",
+                    "timeframe": timeframe,
+                    "parameter": "candidate_lookback_bars",
+                    "primary_value": primary_lookback,
+                    "comparison_value": lookback,
+                    "primary_count": len(primary_candidate_keys),
+                    "comparison_count": len(keys),
+                    "intersection_count": len(primary_candidate_keys & keys),
+                    "jaccard_agreement": _jaccard(primary_candidate_keys, keys),
+                    "agreement_metric": "anchor_candidate_jaccard",
+                }
+            )
+
+        primary_status_keys = _event_keys(primary, ["event_id", "status"])
+        for maximum_age in (25, 100):
+            variant, _ = label_order_blocks(
+                bars,
+                primary_breaks[timeframe],
+                primary_gaps[timeframe],
+                structure,
+                pip_size=pip_size,
+                maximum_age_bars=maximum_age,
+            )
+            keys = _event_keys(variant, ["event_id", "status"])
+            rows.append(
+                {
+                    "concept": "order_block_lifecycle",
+                    "timeframe": timeframe,
+                    "parameter": "maximum_age_bars",
+                    "primary_value": primary_age,
+                    "comparison_value": maximum_age,
+                    "primary_count": len(primary_status_keys),
+                    "comparison_count": len(keys),
+                    "intersection_count": len(primary_status_keys & keys),
+                    "jaccard_agreement": _jaccard(primary_status_keys, keys),
+                    "agreement_metric": "terminal_status_jaccard",
+                }
+            )
+
+        body_variant, _ = label_order_blocks(
+            bars,
+            primary_breaks[timeframe],
+            primary_gaps[timeframe],
+            structure,
+            pip_size=pip_size,
+            zone_geometry="body_range",
+        )
+        overlap = _interval_iou(primary, body_variant)
+        rows.append(
+            {
+                "concept": "order_block_geometry",
+                "timeframe": timeframe,
+                "parameter": "zone_geometry",
+                "primary_value": "full_wick_range",
+                "comparison_value": "body_range",
+                "primary_count": len(primary),
+                "comparison_count": len(body_variant),
+                "intersection_count": len(overlap),
+                "jaccard_agreement": (
+                    float(overlap.median()) if len(overlap) else 0.0
+                ),
+                "agreement_metric": "median_interval_iou",
+            }
+        )
+    return pd.DataFrame.from_records(rows)
+
+
 def _annual_and_monthly_counts(
     collections: dict[str, dict[str, pd.DataFrame]],
     years: tuple[int, ...],
@@ -404,6 +549,26 @@ def _point_in_time_failures(
                         failures.append(
                             f"{concept}/{timeframe}: invalid {column} lifecycle"
                         )
+            if concept == "order_block":
+                invalid_candidate = (
+                    frame["candidate_at"].ge(frame["event_at"])
+                    | frame["candidate_available_at"].gt(frame["event_at"])
+                )
+                if invalid_candidate.any():
+                    failures.append(
+                        f"{concept}/{timeframe}: non-causal candidate selection"
+                    )
+                for column in (
+                    "first_touch_at",
+                    "midpoint_touch_at",
+                    "full_mitigation_at",
+                    "invalidation_at",
+                ):
+                    observed = frame[pd.notna(frame[column])]
+                    if not observed[column].gt(observed["available_at"]).all():
+                        failures.append(
+                            f"{concept}/{timeframe}: invalid {column} lifecycle"
+                        )
     return failures
 
 
@@ -429,6 +594,8 @@ def _build_summary(
     zones: dict[str, pd.DataFrame],
     snapshots: dict[str, pd.DataFrame],
     contexts: dict[str, pd.DataFrame],
+    order_blocks: dict[str, pd.DataFrame],
+    order_block_anchors: dict[str, pd.DataFrame],
     annual: pd.DataFrame,
     sensitivity: pd.DataFrame,
     failures: list[str],
@@ -535,6 +702,42 @@ def _build_summary(
             }
         )
 
+    order_block_rows: list[dict[str, Any]] = []
+    for timeframe in config.structure.order_block.source_timeframes:
+        frame = order_blocks[timeframe]
+        anchors = order_block_anchors[timeframe]
+        order_block_rows.append(
+            {
+                "timeframe": timeframe,
+                "eligible_anchor_count": len(anchors),
+                "candidate_found_count": int(anchors["candidate_found"].sum()),
+                "candidate_found_fraction": float(
+                    anchors["candidate_found"].mean()
+                ),
+                "anchor_status_counts": {
+                    str(key): int(value)
+                    for key, value in anchors["status"].value_counts().items()
+                },
+                "order_block_count": len(frame),
+                "lifecycle_status_counts": {
+                    str(key): int(value)
+                    for key, value in frame["status"].value_counts().items()
+                },
+                "width_pips": _describe(frame["width_pips"]),
+                "candidate_to_anchor_bars": _describe(
+                    frame["candidate_to_anchor_bars"]
+                ),
+                "terminal_delay_bars": _describe(frame["terminal_delay_bars"]),
+                "fvg_confluence_fraction": float(frame["fvg_confluent"].mean()),
+                "overlap_with_prior_zone_count": int(
+                    frame["overlap_with_prior_zone_count"].sum()
+                ),
+                "nested_with_prior_zone_count": int(
+                    frame["nested_with_prior_zone_count"].sum()
+                ),
+            }
+        )
+
     gates: list[dict[str, Any]] = []
     audit = config.structure.audit
     for row in timeframe_rows:
@@ -561,13 +764,21 @@ def _build_summary(
                 ),
             }
         )
-    for row in _records(annual):
-        daily_context_only = (
-            row["timeframe"] == "1D"
-            and row["concept"] in {"structure_break", "fair_value_gap"}
-            and not config.structure.context.daily_entry_trigger_enabled
+    for row in order_block_rows:
+        gates.append(
+            {
+                "gate": "order_block_anchor_candidate_coverage",
+                "scope": row["timeframe"],
+                "value": row["candidate_found_fraction"],
+                "threshold": audit.minimum_order_block_anchor_coverage,
+                "passed": (
+                    row["candidate_found_fraction"]
+                    >= audit.minimum_order_block_anchor_coverage
+                ),
+            }
         )
-        if daily_context_only:
+    for row in _records(annual):
+        if row["concept"] != "order_block":
             continue
         gates.append(
             {
@@ -581,6 +792,11 @@ def _build_summary(
             }
         )
     for row in _records(sensitivity):
+        threshold = (
+            audit.minimum_order_block_geometry_iou
+            if row["concept"] == "order_block_geometry"
+            else audit.minimum_sensitivity_event_agreement
+        )
         gates.append(
             {
                 "gate": "sensitivity_event_agreement",
@@ -589,11 +805,8 @@ def _build_summary(
                     f"{row['parameter']}={row['comparison_value']}"
                 ),
                 "value": row["jaccard_agreement"],
-                "threshold": audit.minimum_sensitivity_event_agreement,
-                "passed": (
-                    row["jaccard_agreement"]
-                    >= audit.minimum_sensitivity_event_agreement
-                ),
+                "threshold": threshold,
+                "passed": row["jaccard_agreement"] >= threshold,
             }
         )
     gates.append(
@@ -607,11 +820,15 @@ def _build_summary(
     )
     failed = [gate for gate in gates if not gate["passed"]]
     return {
-        "phase": "0.1",
+        "phase": "0.2",
         "purpose": "definition_audit_without_trading_or_pnl",
         "status": "pass" if not failed else "fail",
         "timeframes": timeframe_rows,
         "support_resistance": zone_rows,
+        "order_blocks": order_block_rows,
+        "order_block_strategy_admitted": (
+            config.structure.order_block.strategy_admitted
+        ),
         "annual_counts": _records(annual),
         "sensitivity": _records(sensitivity),
         "point_in_time_failures": failures,
@@ -635,34 +852,40 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
     )
 
 
-def run_phase0_1(
+def run_phase0_2(
     project_root: Path,
     data_root: Path,
     *,
     artifact_root: Path | None = None,
 ) -> Phase0Result:
-    """Run the registered Phase-0.1 audit and persist reproducible artifacts."""
+    """Run the registered Phase-0.2 audit and persist reproducible artifacts."""
 
     config = load_project_config(project_root / "config")
     input_paths = canonical_m5_paths(data_root, config.research)
     fingerprint, input_hashes = _fingerprint(project_root, input_paths)
     artifact_directory = (
-        artifact_root or project_root / "artifacts" / "phase0_1"
+        artifact_root or project_root / "artifacts" / "phase0_2"
     )
     artifact_directory = artifact_directory / fingerprint
     artifact_directory.mkdir(parents=True, exist_ok=True)
 
     m5 = load_canonical_m5(data_root, config.research)
     bars_by_timeframe = _prepare_bars(m5, config)
-    swings, breaks, gaps, zones, snapshots, contexts = _primary_labels(
-        bars_by_timeframe, config
-    )
-    sensitivity = _sensitivity_audit(
-        bars_by_timeframe,
+    (
         swings,
         breaks,
         gaps,
+        zones,
         snapshots,
+        contexts,
+        order_blocks,
+        order_block_anchors,
+    ) = _primary_labels(bars_by_timeframe, config)
+    sensitivity = _order_block_sensitivity_audit(
+        bars_by_timeframe,
+        breaks,
+        gaps,
+        order_blocks,
         config,
     )
     collections = {
@@ -670,6 +893,7 @@ def run_phase0_1(
         "structure_break": breaks,
         "fair_value_gap": gaps,
         "active_zone": zones,
+        "order_block": order_blocks,
     }
     years = tuple(
         range(
@@ -684,6 +908,8 @@ def run_phase0_1(
         "fair_value_gap": gaps,
         "zone_snapshot": snapshots,
         "context_state": contexts,
+        "order_block": order_blocks,
+        "order_block_anchor": order_block_anchors,
     }
     failures = _point_in_time_failures(
         bars_by_timeframe, point_in_time_collections
@@ -696,6 +922,8 @@ def run_phase0_1(
         zones,
         snapshots,
         contexts,
+        order_blocks,
+        order_block_anchors,
         annual,
         sensitivity,
         failures,
@@ -715,6 +943,8 @@ def run_phase0_1(
         "support-resistance-zones": _concat(zones),
         "support-resistance-snapshots": _concat(snapshots),
         "context-states": _concat(contexts),
+        "order-blocks": _concat(order_blocks),
+        "order-block-anchor-audit": _concat(order_block_anchors),
     }
     for name, frame in tables.items():
         frame.to_parquet(
@@ -733,13 +963,16 @@ def run_phase0_1(
             continue
         artifact_hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {
-        "phase": "0.1",
+        "phase": "0.2",
         "fingerprint": fingerprint,
         "generated_at": datetime.now(UTC).isoformat(),
         "research_start": config.research.periods.research_start.isoformat(),
         "research_end_exclusive": config.research.periods.research_end.isoformat(),
         "price_source": config.research.data.price_source,
         "source_role": config.research.data.source_role,
+        "order_block_strategy_admitted": (
+            config.structure.order_block.strategy_admitted
+        ),
         "input_sha256": input_hashes,
         "artifact_sha256": artifact_hashes,
         "contains_trades_or_pnl": False,

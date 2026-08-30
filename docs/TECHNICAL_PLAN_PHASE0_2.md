@@ -1,6 +1,6 @@
 # Technical Plan — Phase 0.2 Order Block Definition Audit
 
-**Status:** preregistered before implementation and audit
+**Status:** preregistered before audit and executed; see `PHASE0_2_RESULTS.md`
 **Purpose:** convert Order Block terminology into causal, testable zones without P&L
 
 ## 1. Scope

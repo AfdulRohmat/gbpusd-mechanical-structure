@@ -239,8 +239,27 @@ class IndicatorConfig(StrictModel):
 
 
 class OrderBlockConfig(StrictModel):
-    enabled: Literal[False]
-    status: Literal["deferred_pending_operational_definition"]
+    enabled: Literal[True]
+    strategy_admitted: Literal[False]
+    status: Literal["phase0_2_failed_geometry_gate"]
+    source_timeframes: tuple[Literal["15min", "1H", "4H"], ...]
+    anchor_event_types: tuple[Literal["bos", "choch"], ...]
+    require_displacement: Literal[True]
+    candidate_rule: Literal["last_opposing_non_doji"]
+    candidate_lookback_bars: int = Field(ge=1)
+    zone_geometry: Literal["full_wick_range"]
+    maximum_age_bars: int = Field(ge=1)
+    invalidation: Literal["close_beyond_distal_boundary"]
+    duplicate_candidate_handling: Literal["first_activation_only"]
+    fvg_overlap_required: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_order_block_scope(self) -> OrderBlockConfig:
+        if self.source_timeframes != ("15min", "1H", "4H"):
+            raise ValueError("Order Block source timeframes must be M15, H1, H4")
+        if self.anchor_event_types != ("bos", "choch"):
+            raise ValueError("Order Block anchors must be BOS and CHoCH")
+        return self
 
 
 class StructureAuditConfig(StrictModel):
@@ -248,6 +267,8 @@ class StructureAuditConfig(StrictModel):
     maximum_ambiguous_swing_fraction: float = Field(ge=0, lt=1)
     minimum_sensitivity_event_agreement: float = Field(gt=0, le=1)
     minimum_events_per_year: int = Field(ge=1)
+    minimum_order_block_anchor_coverage: float = Field(gt=0, le=1)
+    minimum_order_block_geometry_iou: float = Field(gt=0, le=1)
 
 
 class StructureConfig(StrictModel):

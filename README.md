@@ -30,6 +30,10 @@ The refined swing and protected-structure state machine passed its registered
 gates with zero point-in-time failures. H1 S/R remains excluded because one
 sensitivity scored 69.69% against the frozen 70% requirement; H4 S/R passed.
 
+Phase 0.2 then audited a mechanical Order Block definition. Formation and
+lifecycle rules passed, but full-wick versus body geometry failed on M15, H1,
+and H4. Order Blocks remain diagnostic labels and are not admitted to Phase 1.
+
 - No strategy P&L has been inspected.
 - BOS, CHoCH, FVG, swing, and S/R definitions are initial operational
   specifications whose stability will be measured without optimizing returns.
@@ -48,6 +52,7 @@ See:
 - `docs/TECHNICAL_PLAN_PHASE0_1.md`
 - `docs/PHASE0_1_RESULTS.md`
 - `docs/TECHNICAL_PLAN_PHASE0_2.md`
+- `docs/PHASE0_2_RESULTS.md`
 
 ## Setup
 
@@ -106,13 +111,13 @@ Audit the linked dataset with:
 .venv/bin/python -m gbpusd_structure audit-data
 ```
 
-Run the current Phase-0.1 definition audit (no trades and no P&L):
+Run the current Phase-0.2 Order Block definition audit (no trades and no P&L):
 
 ```bash
-.venv/bin/python -m gbpusd_structure run-phase0-1
+.venv/bin/python -m gbpusd_structure run-phase0-2
 ```
 
 The command writes fingerprinted, gitignored tables and reports below
-`artifacts/phase0_1/`. A non-zero exit status means at least one registered
+`artifacts/phase0_2/`. A non-zero exit status means at least one registered
 definition gate failed; it does not mean the command crashed. Inspect that
 run's `summary.json` for the exact failed scopes.
