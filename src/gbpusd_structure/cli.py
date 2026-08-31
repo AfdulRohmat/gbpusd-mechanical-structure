@@ -28,6 +28,7 @@ from gbpusd_structure.phase15 import (
     run_phase1_5_construction,
     run_phase1_5_coverage,
 )
+from gbpusd_structure.phase31 import run_phase3_1_construction
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -154,6 +155,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="run return-blind 2024 price-action state/setup coverage",
     )
     phase3.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="optional artifact parent; fingerprint is appended automatically",
+    )
+    phase3_1 = subparsers.add_parser(
+        "run-phase3-1-construction",
+        help="run 2024 P&L for the frozen trend second-entry setups",
+    )
+    phase3_1.add_argument(
         "--artifact-root",
         type=Path,
         help="optional artifact parent; fingerprint is appended automatically",
@@ -519,6 +529,35 @@ def main(argv: Sequence[str] | None = None) -> int:
             "coverage_gate": result.summary["coverage_gate"],
             "construction_pnl_permitted": result.summary[
                 "construction_pnl_permitted"
+            ],
+            "decision": result.summary["decision"],
+        }
+        print(json.dumps(output, indent=2, sort_keys=True))
+        return 0 if result.summary["invariant_failure_count"] == 0 else 1
+    if args.command == "run-phase3-1-construction":
+        root = resolve_data_root(project_root, config.research.data)
+        if not root.is_dir():
+            print(f"Data root does not exist: {root}", file=sys.stderr)
+            return 1
+        artifact_root = args.artifact_root
+        if artifact_root is not None and not artifact_root.is_absolute():
+            artifact_root = project_root / artifact_root
+        try:
+            result = run_phase3_1_construction(
+                project_root,
+                root,
+                artifact_root=artifact_root,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"Phase 3.1 construction failed: {exc}", file=sys.stderr)
+            return 1
+        output = {
+            "artifact_directory": str(result.artifact_directory),
+            "invariant_failure_count": result.summary["invariant_failure_count"],
+            "primary": result.summary["primary"],
+            "construction_gate": result.summary["construction_gate"],
+            "external_validation_permitted": result.summary[
+                "external_validation_permitted"
             ],
             "decision": result.summary["decision"],
         }

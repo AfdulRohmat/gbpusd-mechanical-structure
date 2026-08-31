@@ -121,7 +121,7 @@ Required invariants include:
 
 - one simulated trade for every one of the 164 frozen setups;
 - no range-family outcome access;
-- order availability strictly precedes the trigger bar;
+- order availability is no later than the trigger-bar open;
 - quote-side trigger reproduction for every entry;
 - stop and target on the correct side of entry;
 - no bar after the registered cutoff;
