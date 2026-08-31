@@ -1,5 +1,9 @@
 # GBPUSD Mechanical Structure Research
 
+> **Research status: CLOSED — no deployable edge found.** The repository is a
+> reproducible negative-results archive, not a live trading system. See the
+> [final research closure](docs/RESEARCH_CLOSURE.md).
+
 Reproducible research project for testing whether a point-in-time GBP-minus-USD
 fundamental context and top-down market structure can produce a cost-aware,
 mechanically executable GBPUSD edge.
@@ -25,8 +29,9 @@ future leakage.
 
 ## Current status
 
-Phase 4 returned to the best-looking Phase 1.4 geometry: immediate P3 entry,
-causal structural invalidation stop, and a fixed `+2 signal ATR` target. One
+The research program is complete. Phase 4 returned to the best-looking
+Phase 1.4 geometry: immediate P3 entry, causal structural invalidation stop,
+and a fixed `+2 signal ATR` target. One
 trade-management candidate moved the stop to gross entry after a completed M5
 bar reached `+1 ATR`, effective from the next M5 bar.
 
@@ -36,6 +41,11 @@ However, the candidate remained negative at `-0.0267R/trade` with profit factor
 `0.886`; its paired 95% interval crossed zero. Both sessions and both
 directions failed positive-expectancy gates. This management repair is closed
 without threshold or subgroup retuning.
+
+Across the full program, no structure, filter, FVG entry, stop, target, or
+management candidate passed the registered robustness and full-cost gates. No
+configuration in this repository is approved for live deployment, and no
+further optimization of this signal lineage is planned.
 
 - The Phase-1.1 run had zero point-in-time, session, parent, or execution
   invariant failures.
@@ -48,6 +58,7 @@ without threshold or subgroup retuning.
 
 See:
 
+- `docs/RESEARCH_CLOSURE.md`
 - `docs/PRD_GBPUSD_MECHANICAL_STRUCTURE.md`
 - `docs/TECHNICAL_PLAN_PHASE0.md`
 - `docs/SHARED_DATA_CONTRACT.md`
