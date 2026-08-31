@@ -1,5 +1,9 @@
 # PRD — GBPUSD Fundamental and Mechanical Market Structure Research
 
+> **Final status: closed on 2026-09-01.** No deployable edge was found. This
+> PRD remains the original research contract; the completed decision is recorded
+> in [`RESEARCH_CLOSURE.md`](RESEARCH_CLOSURE.md).
+
 ## 1. Purpose
 
 Determine whether mechanically defined top-down structure, optionally conditioned

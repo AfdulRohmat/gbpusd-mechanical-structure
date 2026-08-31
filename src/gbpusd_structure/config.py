@@ -325,12 +325,1108 @@ class ExecutionConfig(StrictModel):
     simulation: ExecutionSimulationConfig
 
 
+Phase1ModelId = Literal[
+    "p0_session_drift",
+    "p1_h4_momentum",
+    "p2_h4_sr",
+    "p3_m15_structure",
+    "p4_top_down_structure",
+    "p5_top_down_structure_fvg",
+]
+
+
+class Phase1ScopeConfig(StrictModel):
+    sessions: tuple[Literal["london", "new_york"], ...]
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    price_only: Literal[True]
+    excluded_features: tuple[
+        Literal[
+            "order_block",
+            "h1_support_resistance",
+            "fundamental_bias",
+            "ema",
+            "rsi",
+        ],
+        ...,
+    ]
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> Phase1ScopeConfig:
+        if self.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1 sessions must be London then New York")
+        required = {
+            "order_block",
+            "h1_support_resistance",
+            "fundamental_bias",
+            "ema",
+            "rsi",
+        }
+        if set(self.excluded_features) != required:
+            raise ValueError("Phase 1 exclusions must remain frozen")
+        return self
+
+
+class Phase1OpportunityConfig(StrictModel):
+    maximum_trades_per_model_session: Literal[1]
+    signal_observation_minutes: int = Field(gt=0)
+    require_session_open_m5_bar: Literal[True]
+
+
+class Phase1BaselineConfig(StrictModel):
+    id: Phase1ModelId
+    signal: Literal[
+        "fitted_fixed_session_direction",
+        "latest_completed_h4_close_change",
+        "first_causal_h4_zone_breakout_or_rejection",
+        "first_m15_bos_or_choch",
+        "p3_aligned_with_h1_and_h4_context",
+        "p4_with_displacement_and_same_bar_directional_fvg",
+    ]
+
+
+class Phase1SessionDriftConfig(StrictModel):
+    fit_period: Literal["construction"]
+    fit_separately_by_session: Literal[True]
+    candidates: tuple[Literal["long", "short"], ...]
+    objective: Literal["mean_primary_net_r"]
+    tie_break: Literal["long"]
+
+
+class Phase1SupportResistanceSignalConfig(StrictModel):
+    source_timeframe: Literal["4H"]
+    setup_timeframe: Literal["15min"]
+    require_zone_active_before_setup_bar: Literal[True]
+    maximum_zone_age_h4_bars: int = Field(ge=1)
+    breakout_close_buffer_atr: float = Field(ge=0)
+    candidate_order: tuple[
+        Literal["normalized_distance", "breakout_before_rejection", "zone_id"],
+        ...,
+    ]
+
+
+class Phase1StructureSignalConfig(StrictModel):
+    setup_timeframe: Literal["15min"]
+    event_types: tuple[Literal["bos", "choch"], ...]
+    top_down_context_timeframes: tuple[Literal["1H", "4H"], ...]
+    daily_role: Literal["report_stratum_only"]
+    fvg_same_bar_required: Literal[True]
+    fvg_same_direction_required: Literal[True]
+    displacement_required_for_fvg_model: Literal[True]
+
+
+class Phase1RiskConfig(StrictModel):
+    stop_atr: float = Field(gt=0)
+    target_r: float = Field(gt=0)
+    atr_source: Literal["signal_m15_atr"]
+    bracket_anchor: Literal["observed_entry_quote_before_slippage"]
+    management_cutoff: dict[
+        Literal["london", "new_york"],
+        Literal["new_york_open", "fx_day_boundary"],
+    ]
+    force_flat_at_cutoff: Literal[True]
+    concurrent_positions_per_model: Literal[1]
+
+    @model_validator(mode="after")
+    def validate_cutoffs(self) -> Phase1RiskConfig:
+        expected = {
+            "london": "new_york_open",
+            "new_york": "fx_day_boundary",
+        }
+        if self.management_cutoff != expected:
+            raise ValueError("Phase 1 management cutoffs must remain frozen")
+        return self
+
+
+class Phase1StatisticsConfig(StrictModel):
+    comparison_unit: Literal["session_day_opportunity"]
+    no_trade_return_r: Literal[0.0]
+    bootstrap_unit: Literal["fx_session_date"]
+    bootstrap_resamples: int = Field(ge=100)
+    confidence_level: float = Field(gt=0, lt=1)
+    primary_period: Literal["replication"]
+    construction_is_descriptive: Literal[True]
+
+
+class Phase1AdvancementGateConfig(StrictModel):
+    candidates: tuple[
+        Literal["p4_top_down_structure", "p5_top_down_structure_fvg"], ...
+    ]
+    require_zero_causality_failures: Literal[True]
+    minimum_trades_per_year: int = Field(ge=1)
+    minimum_trades_per_session_replication: int = Field(ge=1)
+    minimum_trades_per_direction_replication: int = Field(ge=1)
+    require_positive_construction_expectancy: Literal[True]
+    require_positive_replication_expectancy: Literal[True]
+    require_positive_replication_expectancy_each_session: Literal[True]
+    require_positive_replication_expectancy_each_direction: Literal[True]
+    require_replication_profit_factor_above_one: Literal[True]
+    require_replication_opportunity_mean_ci_above_zero: Literal[True]
+    require_positive_stress_replication_expectancy: Literal[True]
+    maximum_best_month_share_of_positive_r: float = Field(gt=0, le=1)
+    nearest_baseline: dict[
+        Literal["p4_top_down_structure", "p5_top_down_structure_fvg"],
+        Literal["p3_m15_structure", "p4_top_down_structure"],
+    ]
+    require_positive_incremental_replication_opportunity_mean: Literal[True]
+
+
+class Phase1Config(StrictModel):
+    phase: Literal["phase1_nested_price_baselines"]
+    status: Literal["preregistered"]
+    scope: Phase1ScopeConfig
+    opportunity: Phase1OpportunityConfig
+    baselines: tuple[Phase1BaselineConfig, ...]
+    session_drift_fit: Phase1SessionDriftConfig
+    support_resistance_signal: Phase1SupportResistanceSignalConfig
+    structure_signal: Phase1StructureSignalConfig
+    risk: Phase1RiskConfig
+    statistics: Phase1StatisticsConfig
+    advancement_gate: Phase1AdvancementGateConfig
+
+    @model_validator(mode="after")
+    def validate_baseline_ladder(self) -> Phase1Config:
+        expected = (
+            "p0_session_drift",
+            "p1_h4_momentum",
+            "p2_h4_sr",
+            "p3_m15_structure",
+            "p4_top_down_structure",
+            "p5_top_down_structure_fvg",
+        )
+        if tuple(item.id for item in self.baselines) != expected:
+            raise ValueError("Phase 1 baseline ladder must remain frozen")
+        if self.structure_signal.event_types != ("bos", "choch"):
+            raise ValueError("Phase 1 structure events must be BOS then CHoCH")
+        return self
+
+
+class Phase11ParentConfig(StrictModel):
+    branch: Literal["phase/01-nested-price-baselines"]
+    fingerprint: Literal["daac4b3ee86ac545"]
+
+
+class Phase11OpportunityConfig(StrictModel):
+    maximum_trades_per_model_session: Literal[1]
+    setup_signal_window: Literal["full_session"]
+    setup_selection: Literal["first_candidate_satisfying_each_model"]
+    require_session_open_m5_bar: Literal[True]
+    decision_must_be_before_cutoff: Literal[True]
+    minimum_minutes_remaining: Literal[0]
+    window_end: dict[
+        Literal["london", "new_york"],
+        Literal["new_york_open", "fx_day_boundary"],
+    ]
+
+    @model_validator(mode="after")
+    def validate_window_end(self) -> Phase11OpportunityConfig:
+        expected = {
+            "london": "new_york_open",
+            "new_york": "fx_day_boundary",
+        }
+        if self.window_end != expected:
+            raise ValueError("Phase 1.1 session ends must remain frozen")
+        return self
+
+
+class Phase11BaselineConfig(StrictModel):
+    id: Phase1ModelId
+    signal: Literal[
+        "fitted_fixed_session_direction",
+        "latest_completed_h4_close_change",
+        "first_causal_h4_zone_breakout_or_rejection",
+        "first_m15_bos_or_choch",
+        "first_m15_structure_aligned_with_h1_and_h4_context",
+        "first_aligned_structure_with_displacement_and_directional_fvg",
+    ]
+
+
+class Phase11Config(StrictModel):
+    phase: Literal["phase1_1_full_session_setups"]
+    status: Literal["preregistered_after_phase1"]
+    parent: Phase11ParentConfig
+    scope: Phase1ScopeConfig
+    opportunity: Phase11OpportunityConfig
+    baselines: tuple[Phase11BaselineConfig, ...]
+    session_drift_fit: Phase1SessionDriftConfig
+    support_resistance_signal: Phase1SupportResistanceSignalConfig
+    structure_signal: Phase1StructureSignalConfig
+    risk: Phase1RiskConfig
+    statistics: Phase1StatisticsConfig
+    advancement_gate: Phase1AdvancementGateConfig
+
+    @model_validator(mode="after")
+    def validate_revision(self) -> Phase11Config:
+        expected = (
+            "p0_session_drift",
+            "p1_h4_momentum",
+            "p2_h4_sr",
+            "p3_m15_structure",
+            "p4_top_down_structure",
+            "p5_top_down_structure_fvg",
+        )
+        if tuple(item.id for item in self.baselines) != expected:
+            raise ValueError("Phase 1.1 baseline ladder must remain frozen")
+        return self
+
+
+Phase12FilterId = Literal[
+    "f1_displacement",
+    "f2_h1_opposition_veto",
+    "f3_h4_opposition_veto",
+    "f4_h1_h4_opposition_veto",
+    "f5_displacement_h4_veto",
+    "f6_displacement_h1_h4_veto",
+]
+Phase12Rule = Literal[
+    "displacement",
+    "h1_opposition_veto",
+    "h4_opposition_veto",
+]
+
+
+class Phase12ParentConfig(StrictModel):
+    branch: Literal["phase/01-1-full-session-setups"]
+    fingerprint: Literal["90d1e369b427d3d8"]
+
+
+class Phase12ScopeConfig(StrictModel):
+    baseline_model: Literal["p3_m15_structure"]
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    excluded_posthoc_filters: tuple[
+        Literal["session", "event_type", "local_hour"], ...
+    ]
+    excluded_features: tuple[
+        Literal[
+            "order_block",
+            "h1_support_resistance",
+            "fundamental_bias",
+            "ema",
+            "rsi",
+            "fvg",
+        ],
+        ...,
+    ]
+
+
+class Phase12CandidateConfig(StrictModel):
+    id: Phase12FilterId
+    rules: tuple[Phase12Rule, ...]
+
+
+class Phase12CoverageConfig(StrictModel):
+    returns_access_allowed: Literal[False]
+    period: Literal["construction"]
+    target_trades_per_month_minimum: Literal[20]
+    target_trades_per_month_maximum: Literal[25]
+    target_trades_per_year_minimum: Literal[240]
+    target_trades_per_year_maximum: Literal[300]
+    selection: Literal["first_candidate_satisfying_filter_per_session"]
+    candidates: tuple[Phase12CandidateConfig, ...]
+
+    @model_validator(mode="after")
+    def validate_candidates(self) -> Phase12CoverageConfig:
+        expected = {
+            "f1_displacement": ("displacement",),
+            "f2_h1_opposition_veto": ("h1_opposition_veto",),
+            "f3_h4_opposition_veto": ("h4_opposition_veto",),
+            "f4_h1_h4_opposition_veto": (
+                "h1_opposition_veto",
+                "h4_opposition_veto",
+            ),
+            "f5_displacement_h4_veto": (
+                "displacement",
+                "h4_opposition_veto",
+            ),
+            "f6_displacement_h1_h4_veto": (
+                "displacement",
+                "h1_opposition_veto",
+                "h4_opposition_veto",
+            ),
+        }
+        actual = {item.id: item.rules for item in self.candidates}
+        if actual != expected:
+            raise ValueError("Phase 1.2 light-filter definitions must remain frozen")
+        return self
+
+
+class Phase12DisplacementConfig(StrictModel):
+    source_field: Literal["displacement_qualified"]
+    required_value: Literal[True]
+    frozen_minimum_body_atr: Literal[0.8]
+
+
+class Phase12VetoConfig(StrictModel):
+    timeframe: Literal["1H", "4H"]
+    long_rejected_state: Literal["bearish"]
+    short_rejected_state: Literal["bullish"]
+    allowed_states: tuple[
+        Literal["aligned", "transition", "balance", "undetermined"], ...
+    ]
+
+
+class Phase12FilterDefinitionsConfig(StrictModel):
+    displacement: Phase12DisplacementConfig
+    h1_opposition_veto: Phase12VetoConfig
+    h4_opposition_veto: Phase12VetoConfig
+
+
+class Phase12ConstructionSelectionConfig(StrictModel):
+    pnl_access_scope: Literal["construction_eligible_filters_only"]
+    baseline_comparison: Literal["p3_m15_structure"]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_mean_opportunity_improvement_over_p3: Literal[True]
+    winner_objective: Literal["highest_mean_opportunity_net_r"]
+    tie_break_order: tuple[Phase12FilterId, ...]
+    maximum_replication_candidates: Literal[1]
+    no_qualified_winner_action: Literal["stop_without_replication"]
+
+
+class Phase12ExecutionConfig(StrictModel):
+    inherit_from_phase1_1: Literal[True]
+    stop_atr: Literal[1.0]
+    target_r: Literal[2.0]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    force_flat_at_session_cutoff: Literal[True]
+
+
+class Phase12ReplicationGateConfig(StrictModel):
+    require_frozen_selection_file: Literal[True]
+    required_trade_count_minimum: Literal[240]
+    required_trade_count_maximum: Literal[300]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_mean_opportunity_net_r: Literal[True]
+    require_mean_opportunity_improvement_over_p3: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_positive_stress_expectancy: Literal[True]
+    require_opportunity_mean_ci_above_zero: Literal[True]
+    maximum_best_month_share_of_positive_r: Literal[0.5]
+
+
+class Phase12Config(StrictModel):
+    phase: Literal["phase1_2_light_filter_ablation"]
+    status: Literal["preregistered_before_coverage"]
+    parent: Phase12ParentConfig
+    scope: Phase12ScopeConfig
+    coverage_screen: Phase12CoverageConfig
+    filter_definitions: Phase12FilterDefinitionsConfig
+    construction_selection: Phase12ConstructionSelectionConfig
+    execution: Phase12ExecutionConfig
+    replication_gate: Phase12ReplicationGateConfig
+
+
+class Phase12CoverageEligibleConfig(StrictModel):
+    id: Literal["f1_displacement", "f4_h1_h4_opposition_veto"]
+    trade_count: int = Field(ge=240, le=300)
+    mean_trades_per_month: float = Field(ge=20, le=25)
+
+
+class Phase12CoverageExcludedConfig(StrictModel):
+    id: Literal[
+        "f2_h1_opposition_veto",
+        "f3_h4_opposition_veto",
+        "f5_displacement_h4_veto",
+        "f6_displacement_h1_h4_veto",
+    ]
+    trade_count: int = Field(ge=0)
+    reason: Literal["above_coverage_maximum", "below_coverage_minimum"]
+
+
+class Phase12CoverageSelectionConfig(StrictModel):
+    phase: Literal["phase1_2_light_filter_ablation"]
+    stage: Literal["construction_coverage_only"]
+    status: Literal["frozen_before_construction_pnl"]
+    coverage_fingerprint: Literal["accd1392cff3c949"]
+    parent_fingerprint: Literal["90d1e369b427d3d8"]
+    construction_year: Literal[2024]
+    target_trade_count: tuple[Literal[240], Literal[300]]
+    pnl_inspected: Literal[False]
+    eligible_filters: tuple[Phase12CoverageEligibleConfig, ...]
+    excluded_filters: tuple[Phase12CoverageExcludedConfig, ...]
+
+    @model_validator(mode="after")
+    def validate_frozen_coverage(self) -> Phase12CoverageSelectionConfig:
+        eligible = tuple(item.id for item in self.eligible_filters)
+        if eligible != ("f1_displacement", "f4_h1_h4_opposition_veto"):
+            raise ValueError("Frozen Phase 1.2 coverage selection changed")
+        if sum(item.trade_count for item in self.eligible_filters) != 563:
+            raise ValueError("Frozen Phase 1.2 coverage counts changed")
+        return self
+
+
+class Phase13ParentConfig(StrictModel):
+    branch: Literal["phase/01-1-full-session-setups"]
+    fingerprint: Literal["90d1e369b427d3d8"]
+    baseline_model: Literal["p3_m15_structure"]
+
+
+class Phase13ScopeConfig(StrictModel):
+    periods: tuple[Literal["construction", "replication"], ...]
+    years: tuple[Literal[2024, 2025], ...]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    signal_selection: Literal["frozen_parent_p3_signals"]
+    alter_signals: Literal[False]
+    strategy_pnl_selection: Literal[False]
+
+
+class Phase13PathMeasurementConfig(StrictModel):
+    timeframe: Literal["5min"]
+    start: Literal["observed_entry_bar"]
+    end: Literal["session_cutoff_exclusive"]
+    long_entry_quote: Literal["ask_open"]
+    long_path_quote: Literal["bid"]
+    short_entry_quote: Literal["bid_open"]
+    short_path_quote: Literal["ask"]
+    anchor: Literal["observed_entry_quote_before_slippage"]
+    stop_disabled_during_measurement: Literal[True]
+    commission_in_excursion: Literal[False]
+    slippage_in_excursion: Literal[False]
+    observed_spread_in_excursion: Literal[True]
+    same_bar_policy: Literal["ambiguous_stop_first"]
+    later_target_requires_later_m5_bar: Literal[True]
+
+
+class Phase13ThresholdConfig(StrictModel):
+    stop_atr_multiples: tuple[
+        Literal[1.0, 1.25, 1.5, 2.0], ...
+    ]
+    fixed_target_atr: Literal[2.0]
+    rr_preserving_target_multiple: Literal[2.0]
+
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> Phase13ThresholdConfig:
+        if self.stop_atr_multiples != (1.0, 1.25, 1.5, 2.0):
+            raise ValueError("Phase 1.3 stop thresholds must remain frozen")
+        return self
+
+
+class Phase13ReportingConfig(StrictModel):
+    scopes: tuple[Literal["overall", "session", "direction"], ...]
+    excursion_quantiles: tuple[Literal[0.25, 0.5, 0.75, 0.9], ...]
+    separate_periods: Literal[True]
+    report_fixed_target_paths: Literal[True]
+    report_rr_preserving_paths: Literal[True]
+    winner_selection: Literal["none"]
+
+
+class Phase13Config(StrictModel):
+    phase: Literal["phase1_3_stop_adequacy_audit"]
+    status: Literal["preregistered_before_path_audit"]
+    parent: Phase13ParentConfig
+    scope: Phase13ScopeConfig
+    path_measurement: Phase13PathMeasurementConfig
+    thresholds: Phase13ThresholdConfig
+    reporting: Phase13ReportingConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase13Config:
+        if self.scope.periods != ("construction", "replication"):
+            raise ValueError("Phase 1.3 periods must remain frozen")
+        if self.scope.years != (2024, 2025):
+            raise ValueError("Phase 1.3 years must remain frozen")
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1.3 sessions must remain frozen")
+        if self.reporting.scopes != ("overall", "session", "direction"):
+            raise ValueError("Phase 1.3 report scopes must remain frozen")
+        return self
+
+
+class Phase14ParentConfig(StrictModel):
+    branch: Literal["phase/01-1-full-session-setups"]
+    fingerprint: Literal["90d1e369b427d3d8"]
+    diagnostic_fingerprint: Literal["c9475ab43c8aba4a"]
+    baseline_model: Literal["p3_m15_structure"]
+
+
+class Phase14ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    frozen_parent_signals: Literal[True]
+    maximum_trades_per_session: Literal[1]
+    alter_signal_frequency: Literal[False]
+
+
+class Phase14InvalidationConfig(StrictModel):
+    timeframe: Literal["15min"]
+    bos_rule: Literal["latest_confirmed_opposing_swing"]
+    choch_rule: Literal["latest_confirmed_opposing_swing_proxy"]
+    swing_available_by_decision: Literal[True]
+    swing_pivot_before_decision: Literal[True]
+    long_level_quote: Literal["bid_low"]
+    short_level_quote: Literal["ask_high"]
+    buffer_signal_atr: Literal[0.1]
+    distance_filter: Literal["none"]
+    missing_or_wrong_side_action: Literal["audit_failure"]
+
+
+class Phase14VariantConfig(StrictModel):
+    id: Literal[
+        "p3_atr_1_target_2atr",
+        "p3_structure_target_2atr",
+        "p3_structure_target_2r",
+    ]
+    stop: Literal["signal_atr_1", "causal_structure_invalidation"]
+    target: Literal["signal_atr_2", "structure_risk_2"]
+    role: Literal["frozen_baseline", "diagnostic_only", "strategy_candidate"]
+
+
+class Phase14RiskConfig(StrictModel):
+    fixed_risk_usd: Literal[30.0]
+    usd_per_pip_per_standard_lot: Literal[10.0]
+    lot_quantization_enabled: Literal[False]
+    risk_denominator: Literal["entry_to_stop_before_costs"]
+    target_r: Literal[2.0]
+
+
+class Phase14ExecutionConfig(StrictModel):
+    inherit_from_phase1_1: Literal[True]
+    bracket_anchor: Literal["observed_entry_quote_before_slippage"]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    intrabar_priority: Literal["stop_first"]
+    force_flat_at_session_cutoff: Literal[True]
+
+
+class Phase14ConstructionGateConfig(StrictModel):
+    candidate: Literal["p3_structure_target_2r"]
+    require_zero_invariant_failures: Literal[True]
+    require_same_signal_count_as_parent: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_mean_opportunity_improvement_over_parent: Literal[True]
+    no_qualified_candidate_action: Literal["stop_without_replication"]
+
+
+class Phase14ReplicationGateConfig(StrictModel):
+    require_frozen_selection_file: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_mean_opportunity_net_r: Literal[True]
+    require_mean_opportunity_improvement_over_parent: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_positive_stress_expectancy: Literal[True]
+    require_opportunity_mean_ci_above_zero: Literal[True]
+    maximum_best_month_share_of_positive_r: Literal[0.5]
+
+
+class Phase14Config(StrictModel):
+    phase: Literal["phase1_4_structural_stop_ablation"]
+    status: Literal["preregistered_before_structural_stop_returns"]
+    parent: Phase14ParentConfig
+    scope: Phase14ScopeConfig
+    invalidation: Phase14InvalidationConfig
+    variants: tuple[Phase14VariantConfig, ...]
+    risk: Phase14RiskConfig
+    execution: Phase14ExecutionConfig
+    construction_gate: Phase14ConstructionGateConfig
+    replication_gate: Phase14ReplicationGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase14Config:
+        expected = (
+            (
+                "p3_atr_1_target_2atr",
+                "signal_atr_1",
+                "signal_atr_2",
+                "frozen_baseline",
+            ),
+            (
+                "p3_structure_target_2atr",
+                "causal_structure_invalidation",
+                "signal_atr_2",
+                "diagnostic_only",
+            ),
+            (
+                "p3_structure_target_2r",
+                "causal_structure_invalidation",
+                "structure_risk_2",
+                "strategy_candidate",
+            ),
+        )
+        actual = tuple(
+            (item.id, item.stop, item.target, item.role) for item in self.variants
+        )
+        if actual != expected:
+            raise ValueError("Phase 1.4 variants must remain frozen")
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1.4 sessions must remain frozen")
+        return self
+
+
+class Phase15ParentConfig(StrictModel):
+    branch: Literal["phase/01-4-structural-stop-ablation"]
+    signal_fingerprint: Literal["90d1e369b427d3d8"]
+    structural_construction_fingerprint: Literal["41fe02f5ef90868b"]
+    baseline_model: Literal["p3_structure_target_2atr"]
+
+
+class Phase15ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    one_trade_per_session: Literal[True]
+    frozen_p3_signal: Literal[True]
+    structural_mapping_required_at_entry: Literal[True]
+
+
+class Phase15M1DataConfig(StrictModel):
+    source: Literal["histdata_tick_archives"]
+    source_timezone: Literal["Etc/GMT+5"]
+    raw_archive_glob: str
+    output_glob: str
+    price_sides: tuple[Literal["bid", "ask", "mid"], ...]
+    require_utc: Literal[True]
+    require_unique_timestamp: Literal[True]
+    require_m1_to_m5_reconciliation: Literal[True]
+
+
+class Phase15FvgConfig(StrictModel):
+    geometry: Literal["three_candle_wick_gap"]
+    atr_period: Literal[14]
+    minimum_size_atr: Literal[0.1]
+    require_contiguous_bars: Literal[True]
+    direction_must_match_signal: Literal[True]
+    first_available_fvg_only: Literal[True]
+    fvg_available_at_or_after_signal: Literal[True]
+    mitigation_must_be_after_fvg_availability: Literal[True]
+    m1_zone_must_overlap_parent_m5_zone: Literal[True]
+
+
+class Phase15DestinationConfig(StrictModel):
+    stop: Literal["frozen_causal_structural_stop"]
+    target: Literal["frozen_parent_immediate_entry_plus_minus_2_signal_atr"]
+    target_does_not_move_with_pullback_entry: Literal[True]
+    preentry_priority: tuple[Literal["stop", "target", "mitigation"], ...]
+
+
+class Phase15VariantConfig(StrictModel):
+    id: Literal[
+        "e0_immediate_structure_2atr",
+        "e1_m5_fvg_mitigation",
+        "e2_m5_fvg_m1_refinement",
+    ]
+    entry: Literal[
+        "parent_immediate_m5_open",
+        "next_m5_open_after_first_m5_fvg_mitigation",
+        "next_m1_open_after_nested_directional_m1_fvg",
+    ]
+    role: Literal["frozen_baseline", "candidate"]
+
+
+class Phase15CoverageConfig(StrictModel):
+    period: Literal["construction"]
+    returns_access_allowed: Literal[False]
+    minimum_evaluable_trades_per_year: Literal[120]
+    desired_trades_per_year: tuple[Literal[240, 300], ...]
+    report_cancellation_reasons: Literal[True]
+    no_eligible_candidate_action: Literal["stop_without_pnl"]
+
+
+class Phase15ExecutionConfig(StrictModel):
+    observed_bid_ask: Literal[True]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    intrabar_priority: Literal["stop_first"]
+    force_flat_at_session_cutoff: Literal[True]
+    fixed_risk_usd: Literal[30.0]
+    lot_quantization_enabled: Literal[False]
+
+
+class Phase15ConstructionGateConfig(StrictModel):
+    require_frozen_coverage_selection: Literal[True]
+    require_zero_invariant_failures: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_mean_opportunity_improvement_over_parent: Literal[True]
+    maximum_replication_candidates: Literal[1]
+    winner_objective: Literal["highest_mean_opportunity_net_r"]
+    no_qualified_candidate_action: Literal["stop_without_replication"]
+
+
+class Phase15Config(StrictModel):
+    phase: Literal["phase1_5_fvg_pullback_entry"]
+    status: Literal["preregistered_before_coverage"]
+    parent: Phase15ParentConfig
+    scope: Phase15ScopeConfig
+    m1_data: Phase15M1DataConfig
+    fvg: Phase15FvgConfig
+    destination: Phase15DestinationConfig
+    variants: tuple[Phase15VariantConfig, ...]
+    coverage_stage: Phase15CoverageConfig
+    execution: Phase15ExecutionConfig
+    construction_gate: Phase15ConstructionGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase15Config:
+        expected = (
+            (
+                "e0_immediate_structure_2atr",
+                "parent_immediate_m5_open",
+                "frozen_baseline",
+            ),
+            (
+                "e1_m5_fvg_mitigation",
+                "next_m5_open_after_first_m5_fvg_mitigation",
+                "candidate",
+            ),
+            (
+                "e2_m5_fvg_m1_refinement",
+                "next_m1_open_after_nested_directional_m1_fvg",
+                "candidate",
+            ),
+        )
+        actual = tuple((item.id, item.entry, item.role) for item in self.variants)
+        if actual != expected:
+            raise ValueError("Phase 1.5 entry variants must remain frozen")
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 1.5 sessions must remain frozen")
+        if self.destination.preentry_priority != ("stop", "target", "mitigation"):
+            raise ValueError("Phase 1.5 pre-entry priority must remain frozen")
+        if self.m1_data.price_sides != ("bid", "ask", "mid"):
+            raise ValueError("Phase 1.5 M1 price sides must remain frozen")
+        if self.coverage_stage.desired_trades_per_year != (240, 300):
+            raise ValueError("Phase 1.5 desired coverage must remain frozen")
+        return self
+
+
+class Phase15CoverageCandidateSelection(StrictModel):
+    id: Literal["e1_m5_fvg_mitigation", "e2_m5_fvg_m1_refinement"]
+    entry_count: int = Field(ge=120)
+    mean_entries_per_month: float = Field(gt=0)
+    desired_coverage_met: bool
+
+
+class Phase15CoverageSelectionConfig(StrictModel):
+    phase: Literal["phase1_5_fvg_pullback_entry"]
+    stage: Literal["construction_coverage_only"]
+    status: Literal["frozen_before_construction_pnl"]
+    coverage_fingerprint: Literal["033953375cc05c79"]
+    parent_fingerprint: Literal["41fe02f5ef90868b"]
+    construction_year: Literal[2024]
+    returns_inspected: Literal[False]
+    minimum_evaluable_count: Literal[120]
+    desired_coverage_range: tuple[Literal[240, 300], ...]
+    eligible_candidates: tuple[Phase15CoverageCandidateSelection, ...]
+
+    @model_validator(mode="after")
+    def validate_frozen_selection(self) -> Phase15CoverageSelectionConfig:
+        actual = tuple(
+            (item.id, item.entry_count, item.desired_coverage_met)
+            for item in self.eligible_candidates
+        )
+        expected = (
+            ("e1_m5_fvg_mitigation", 250, True),
+            ("e2_m5_fvg_m1_refinement", 170, False),
+        )
+        if actual != expected:
+            raise ValueError("Phase 1.5 frozen coverage selection changed")
+        if self.desired_coverage_range != (240, 300):
+            raise ValueError("Phase 1.5 frozen desired coverage changed")
+        return self
+
+
+class Phase2ParentConfig(StrictModel):
+    branch: Literal["phase/01-5-fvg-pullback-entry"]
+    p3_signal_fingerprint: Literal["90d1e369b427d3d8"]
+    phase1_5_construction_fingerprint: Literal["80e415a3f056942d"]
+
+
+class Phase2ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    historical_replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    event_timeframe: Literal["15min"]
+    primary_sample: Literal["first_event_per_primitive_per_session"]
+    diagnostic_sample: Literal["all_events"]
+    returns_mode: Literal["gross_mid_price_directional_only"]
+    transaction_costs_applied: Literal[False]
+    historical_replication_access_allowed: Literal[False]
+
+
+class Phase2EventConfig(StrictModel):
+    primitives: tuple[
+        Literal["bos", "choch", "liquidity_sweep", "displacement"], ...
+    ]
+    bos_definition: Literal["existing_close_confirmed_continuation_break"]
+    choch_definition: Literal[
+        "existing_close_confirmed_protected_swing_break"
+    ]
+    liquidity_sweep_definition: Literal[
+        "wick_beyond_latest_confirmed_swing_then_close_back_inside"
+    ]
+    liquidity_sweep_minimum_excursion_atr: float = Field(gt=0)
+    liquidity_sweep_prediction: Literal["reversal"]
+    consume_swing_after_first_excursion: Literal[True]
+    ambiguous_two_sided_sweep_action: Literal["exclude"]
+    displacement_definition: Literal["completed_body_direction"]
+    displacement_minimum_body_atr: float = Field(gt=0)
+
+
+class Phase2OutcomeConfig(StrictModel):
+    entry_anchor: Literal["first_m5_mid_open_at_or_after_event_availability"]
+    exit_anchor: Literal["exact_horizon_m5_mid_open"]
+    forward_horizons_minutes: tuple[Literal[15, 30, 60, 120, 240], ...]
+    primary_horizon_minutes: Literal[60]
+    barrier_horizon_minutes: Literal[240]
+    barrier_atr: Literal[1.0]
+    same_bar_barrier_policy: Literal["ambiguous"]
+    require_exact_horizon_bar: Literal[True]
+    normalize_by: Literal["frozen_event_m15_atr"]
+
+
+Phase2BaselineRule = Literal[
+    "event_direction",
+    "seeded_random_direction",
+    "session_momentum",
+    "session_mean_reversion",
+    "four_bar_close_breakout",
+]
+
+
+class Phase2BaselineConfig(StrictModel):
+    rules: tuple[Phase2BaselineRule, ...]
+    random_seed: int = Field(ge=0)
+    random_null_resamples: int = Field(ge=100)
+    session_reference: Literal["session_open_mid"]
+    recent_breakout_lookback_m15_bars: int = Field(ge=2)
+    neutral_baseline_action: Literal["report_no_prediction"]
+
+
+class Phase2ReportingConfig(StrictModel):
+    scopes: tuple[
+        Literal[
+            "overall",
+            "session",
+            "direction",
+            "event_type",
+            "context_alignment",
+            "displacement_strength",
+        ],
+        ...,
+    ]
+    context_timeframes: tuple[Literal["1H", "4H"], ...]
+    displacement_strength_boundaries_atr: tuple[float, float]
+    cluster_bootstrap_unit: Literal["session_date"]
+    bootstrap_resamples: int = Field(ge=100)
+    confidence_level: float = Field(gt=0, lt=1)
+    minimum_scope_events: int = Field(ge=1)
+
+
+class Phase2DecisionGateConfig(StrictModel):
+    minimum_primary_events: int = Field(ge=1)
+    require_positive_primary_mean: Literal[True]
+    require_primary_cluster_ci_lower_above_zero: Literal[True]
+    require_above_random_null_upper: Literal[True]
+    require_favorable_first_rate_above_half: Literal[True]
+    require_positive_each_session: Literal[True]
+    require_positive_each_direction: Literal[True]
+    minimum_positive_horizons: int = Field(ge=1, le=5)
+    require_positive_paired_increment_vs_session_momentum: Literal[True]
+    require_positive_paired_increment_vs_session_mean_reversion: Literal[True]
+    no_qualified_primitive_action: Literal[
+        "close_current_structure_signal_thesis"
+    ]
+    qualified_primitive_action: Literal[
+        "freeze_one_winner_before_historical_replication"
+    ]
+
+
+class Phase2Config(StrictModel):
+    phase: Literal["phase2_directional_signal_edge_audit"]
+    status: Literal["preregistered_before_forward_returns"]
+    parent: Phase2ParentConfig
+    scope: Phase2ScopeConfig
+    events: Phase2EventConfig
+    outcomes: Phase2OutcomeConfig
+    baselines: Phase2BaselineConfig
+    reporting: Phase2ReportingConfig
+    decision_gate: Phase2DecisionGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase2Config:
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 2 sessions must remain frozen")
+        if self.events.primitives != (
+            "bos",
+            "choch",
+            "liquidity_sweep",
+            "displacement",
+        ):
+            raise ValueError("Phase 2 primitive order must remain frozen")
+        if self.outcomes.forward_horizons_minutes != (15, 30, 60, 120, 240):
+            raise ValueError("Phase 2 horizons must remain frozen")
+        expected_rules = (
+            "event_direction",
+            "seeded_random_direction",
+            "session_momentum",
+            "session_mean_reversion",
+            "four_bar_close_breakout",
+        )
+        if self.baselines.rules != expected_rules:
+            raise ValueError("Phase 2 baselines must remain frozen")
+        lower, upper = self.reporting.displacement_strength_boundaries_atr
+        if not 0 < lower < upper:
+            raise ValueError("Phase 2 displacement boundaries must increase")
+        return self
+
+
+class Phase4ParentConfig(StrictModel):
+    signal_branch: Literal["phase/01-1-full-session-setups"]
+    signal_fingerprint: Literal["90d1e369b427d3d8"]
+    structural_branch: Literal["phase/01-4-structural-stop-ablation"]
+    structural_construction_fingerprint: Literal["41fe02f5ef90868b"]
+    signal_model: Literal["p3_m15_structure"]
+    expected_signal_count: Literal[383]
+    signal_membership_sha256: Literal[
+        "d7bf7882c2cc08184d34c41b47ee91dd6b41cc8cc98494736f2fe148cfe2753a"
+    ]
+
+
+class Phase4ScopeConfig(StrictModel):
+    evaluation_year: Literal[2025]
+    evidence_role: Literal["historical_replication_not_pristine_holdout"]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    frozen_parent_signals: Literal[True]
+    alter_signal_frequency: Literal[False]
+    construction_candidate_returns_access_allowed: Literal[False]
+    warmup_year: Literal[2024]
+    warmup_role: Literal["causal_structure_labels_only"]
+
+
+class Phase4BracketConfig(StrictModel):
+    entry: Literal["immediate_parent_entry"]
+    hard_stop: Literal["phase1_4_causal_structure_invalidation"]
+    target: Literal["fixed_signal_atr"]
+    target_signal_atr: Literal[2.0]
+    force_flat_at_session_cutoff: Literal[True]
+
+
+class Phase4VariantConfig(StrictModel):
+    id: Literal[
+        "structure_stop_target_2atr_baseline",
+        "structure_stop_target_2atr_be_after_1atr",
+    ]
+    management: Literal[
+        "static_structural_stop",
+        "breakeven_after_completed_m5_reaches_1_signal_atr",
+    ]
+    role: Literal["frozen_reference", "sole_candidate"]
+
+
+class Phase4ProtectionConfig(StrictModel):
+    favorable_trigger_signal_atr: Literal[1.0]
+    trigger_observation: Literal["completed_m5_executable_quote_extreme"]
+    activation: Literal["next_m5_bar"]
+    protected_stop: Literal["gross_entry_reference"]
+    irreversible_after_activation: Literal[True]
+    trigger_bar_priority: Literal["stop_then_target_then_activate"]
+    active_bar_priority: Literal["gap_stop_then_stop_then_target"]
+
+
+class Phase4RiskConfig(StrictModel):
+    fixed_geometric_risk_usd: Literal[30.0]
+    usd_per_pip_per_standard_lot: Literal[10.0]
+    lot_quantization_enabled: Literal[False]
+    risk_denominator: Literal["entry_to_structural_stop_before_costs"]
+
+
+class Phase4ExecutionConfig(StrictModel):
+    observed_bid_ask: Literal[True]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    intrabar_priority: Literal["stop_first"]
+    stop_gap_fill: Literal["worse_executable_open"]
+    target_gap_fill: Literal["target_without_price_improvement"]
+    swap_enabled: Literal[False]
+
+
+class Phase4StatisticsConfig(StrictModel):
+    paired_cluster_unit: Literal["session_date"]
+    bootstrap_resamples: Literal[10000]
+    confidence_level: Literal[0.95]
+    random_seed: Literal[20260901]
+
+
+class Phase4HistoricalGateConfig(StrictModel):
+    candidate: Literal["structure_stop_target_2atr_be_after_1atr"]
+    require_zero_invariant_failures: Literal[True]
+    require_exact_parent_membership: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_paired_improvement_over_baseline: Literal[True]
+    require_paired_improvement_ci_lower_above_zero: Literal[True]
+    require_positive_stress_mean_trade_net_r: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_lower_maximum_drawdown_than_baseline: Literal[True]
+    maximum_best_month_share_of_positive_r: Literal[0.5]
+    passed_action: Literal["candidate_for_exness_or_forward_validation"]
+    failed_action: Literal["close_structure_stop_2atr_management_repair"]
+
+
+class Phase4Config(StrictModel):
+    phase: Literal["phase4_structure_stop_2atr_management"]
+    status: Literal["preregistered_before_2025_management_returns"]
+    parent: Phase4ParentConfig
+    scope: Phase4ScopeConfig
+    bracket: Phase4BracketConfig
+    variants: tuple[Phase4VariantConfig, ...]
+    protection: Phase4ProtectionConfig
+    risk: Phase4RiskConfig
+    execution: Phase4ExecutionConfig
+    statistics: Phase4StatisticsConfig
+    historical_gate: Phase4HistoricalGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase4Config:
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 4 sessions must remain frozen")
+        expected = (
+            (
+                "structure_stop_target_2atr_baseline",
+                "static_structural_stop",
+                "frozen_reference",
+            ),
+            (
+                "structure_stop_target_2atr_be_after_1atr",
+                "breakeven_after_completed_m5_reaches_1_signal_atr",
+                "sole_candidate",
+            ),
+        )
+        actual = tuple((item.id, item.management, item.role) for item in self.variants)
+        if actual != expected:
+            raise ValueError("Phase 4 variants must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
     fundamental: FundamentalConfig
     structure: StructureConfig
     execution: ExecutionConfig
+    phase1: Phase1Config
+    phase1_1: Phase11Config
+    phase1_2: Phase12Config
+    phase1_2_coverage_selection: Phase12CoverageSelectionConfig
+    phase1_3: Phase13Config
+    phase1_4: Phase14Config
+    phase1_5: Phase15Config
+    phase1_5_coverage_selection: Phase15CoverageSelectionConfig
+    phase2: Phase2Config
+    phase4: Phase4Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -362,6 +1458,38 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         execution=ExecutionConfig.model_validate(
             _read_yaml(config_directory / "execution.yaml")
+        ),
+        phase1=Phase1Config.model_validate(
+            _read_yaml(config_directory / "phase1.yaml")
+        ),
+        phase1_1=Phase11Config.model_validate(
+            _read_yaml(config_directory / "phase1_1.yaml")
+        ),
+        phase1_2=Phase12Config.model_validate(
+            _read_yaml(config_directory / "phase1_2.yaml")
+        ),
+        phase1_2_coverage_selection=Phase12CoverageSelectionConfig.model_validate(
+            _read_yaml(config_directory / "phase1_2_coverage_selection.yaml")
+        ),
+        phase1_3=Phase13Config.model_validate(
+            _read_yaml(config_directory / "phase1_3.yaml")
+        ),
+        phase1_4=Phase14Config.model_validate(
+            _read_yaml(config_directory / "phase1_4.yaml")
+        ),
+        phase1_5=Phase15Config.model_validate(
+            _read_yaml(config_directory / "phase1_5.yaml")
+        ),
+        phase1_5_coverage_selection=(
+            Phase15CoverageSelectionConfig.model_validate(
+                _read_yaml(config_directory / "phase1_5_coverage_selection.yaml")
+            )
+        ),
+        phase2=Phase2Config.model_validate(
+            _read_yaml(config_directory / "phase2.yaml")
+        ),
+        phase4=Phase4Config.model_validate(
+            _read_yaml(config_directory / "phase4.yaml")
         ),
     )
 

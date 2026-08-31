@@ -1,5 +1,9 @@
 # GBPUSD Mechanical Structure Research
 
+> **Research status: CLOSED — no deployable edge found.** The repository is a
+> reproducible negative-results archive, not a live trading system. See the
+> [final research closure](docs/RESEARCH_CLOSURE.md).
+
 Reproducible research project for testing whether a point-in-time GBP-minus-USD
 fundamental context and top-down market structure can produce a cost-aware,
 mechanically executable GBPUSD edge.
@@ -25,24 +29,36 @@ future leakage.
 
 ## Current status
 
-Phase 0.1 has been executed. It defines and validates labels; it does not trade.
-The refined swing and protected-structure state machine passed its registered
-gates with zero point-in-time failures. H1 S/R remains excluded because one
-sensitivity scored 69.69% against the frozen 70% requirement; H4 S/R passed.
+The research program is complete. Phase 4 returned to the best-looking
+Phase 1.4 geometry: immediate P3 entry, causal structural invalidation stop,
+and a fixed `+2 signal ATR` target. One
+trade-management candidate moved the stop to gross entry after a completed M5
+bar reached `+1 ATR`, effective from the next M5 bar.
 
-Phase 0.2 then audited a mechanical Order Block definition. Formation and
-lifecycle rules passed, but full-wick versus body geometry failed on M15, H1,
-and H4. Order Blocks remain diagnostic labels and are not admitted to Phase 1.
+On all 383 frozen 2025 signals, management improved expectancy by
+`+0.0145R/trade` and reduced maximum drawdown from `28.90R` to `18.04R`.
+However, the candidate remained negative at `-0.0267R/trade` with profit factor
+`0.886`; its paired 95% interval crossed zero. Both sessions and both
+directions failed positive-expectancy gates. This management repair is closed
+without threshold or subgroup retuning.
 
-- No strategy P&L has been inspected.
-- BOS, CHoCH, FVG, swing, and S/R definitions are initial operational
-  specifications whose stability will be measured without optimizing returns.
-- Order blocks remain deferred until a reproducible definition survives a
-  standalone label audit.
-- EMA and RSI are registered as secondary ablations, not default confluence.
+Across the full program, no structure, filter, FVG entry, stop, target, or
+management candidate passed the registered robustness and full-cost gates. No
+configuration in this repository is approved for live deployment, and no
+further optimization of this signal lineage is planned.
+
+- The Phase-1.1 run had zero point-in-time, session, parent, or execution
+  invariant failures.
+- H1 S/R remains excluded after its Phase-0.1 stability failure.
+- Order Blocks remain diagnostic only after the Phase-0.2 geometry failure and
+  were not used anywhere in Phase 1 or Phase 1.1.
+- Fundamentals, EMA, and RSI remain untested incremental layers.
+- The 2025 Phase 4 result is historical replication, not a pristine
+  program-wide holdout or broker-specific Exness validation.
 
 See:
 
+- `docs/RESEARCH_CLOSURE.md`
 - `docs/PRD_GBPUSD_MECHANICAL_STRUCTURE.md`
 - `docs/TECHNICAL_PLAN_PHASE0.md`
 - `docs/SHARED_DATA_CONTRACT.md`
@@ -53,6 +69,23 @@ See:
 - `docs/PHASE0_1_RESULTS.md`
 - `docs/TECHNICAL_PLAN_PHASE0_2.md`
 - `docs/PHASE0_2_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1.md`
+- `docs/PHASE1_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_1.md`
+- `docs/PHASE1_1_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_2.md`
+- `docs/PHASE1_2_COVERAGE_RESULTS.md`
+- `docs/PHASE1_2_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_3.md`
+- `docs/PHASE1_3_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_4.md`
+- `docs/PHASE1_4_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_5.md`
+- `docs/PHASE1_5_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE2.md`
+- `docs/PHASE2_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE4.md`
+- `docs/PHASE4_RESULTS.md`
 
 ## Setup
 
@@ -121,3 +154,99 @@ The command writes fingerprinted, gitignored tables and reports below
 `artifacts/phase0_2/`. A non-zero exit status means at least one registered
 definition gate failed; it does not mean the command crashed. Inspect that
 run's `summary.json` for the exact failed scopes.
+
+Run the preregistered Phase-1 nested price baselines:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1
+```
+
+The official run writes to `artifacts/phase1/daac4b3ee86ac545/`. The command
+returns non-zero when no advancement candidate passes; this is a research-gate
+result, not a simulator crash.
+
+Run the full-session Phase-1.1 revision:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-1
+```
+
+Its official evidence is under `artifacts/phase1_1/90d1e369b427d3d8/`. Phase 1
+remains preserved as the opening-window parent rather than being overwritten.
+
+Run the staged Phase-1.2 construction study:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-2-coverage
+.venv/bin/python -m gbpusd_structure run-phase1-2-construction
+```
+
+The construction command returns non-zero because no filter qualified for
+replication. No replication command or winner file exists for this run.
+
+Phase 1.3 diagnoses whether P3's `1 ATR` stop is frequently touched before the
+same signal later reaches `+2 ATR`. It measures executable-side M5 MAE/MFE until
+the session cutoff and does not select a new stop or strategy:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-3
+```
+
+The frozen diagnostic contract is documented in
+[`docs/TECHNICAL_PLAN_PHASE1_3.md`](docs/TECHNICAL_PLAN_PHASE1_3.md).
+The completed audit is recorded in
+[`docs/PHASE1_3_RESULTS.md`](docs/PHASE1_3_RESULTS.md), with official local
+evidence under `artifacts/phase1_3/c9475ab43c8aba4a/`.
+
+Phase 1.4 compares the frozen ATR bracket with a causal opposing-swing
+invalidation stop. Construction must qualify before structural-stop replication
+can be opened:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase1-4-construction
+```
+
+The staged contract is documented in
+[`docs/TECHNICAL_PLAN_PHASE1_4.md`](docs/TECHNICAL_PLAN_PHASE1_4.md).
+Construction stopped without replication; the evidence and mapping limitation
+are recorded in [`docs/PHASE1_4_RESULTS.md`](docs/PHASE1_4_RESULTS.md).
+
+Phase 1.5 builds causal M1 bars from the existing local HistData tick archives
+before evaluating nested M5/M1 FVG pullback entries:
+
+```bash
+.venv/bin/python -m gbpusd_structure build-phase1-5-m1 --year 2024
+.venv/bin/python -m gbpusd_structure run-phase1-5-coverage
+.venv/bin/python -m gbpusd_structure run-phase1-5-construction
+```
+
+The entry and evidence-lock contract is in
+[`docs/TECHNICAL_PLAN_PHASE1_5.md`](docs/TECHNICAL_PLAN_PHASE1_5.md).
+Coverage and construction stopped without replication; results are recorded in
+[`docs/PHASE1_5_RESULTS.md`](docs/PHASE1_5_RESULTS.md).
+
+Phase 2 audits whether the underlying M15 BOS, CHoCH, liquidity-sweep, and
+displacement directions contain gross forward-return information before any
+entry, stop, target, or cost model is applied:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase2-directional-audit
+```
+
+The preregistered contract is in
+[`docs/TECHNICAL_PLAN_PHASE2.md`](docs/TECHNICAL_PLAN_PHASE2.md). No primitive
+qualified; the current mechanical structure-signal thesis is closed in
+[`docs/PHASE2_RESULTS.md`](docs/PHASE2_RESULTS.md).
+
+Phase 4 evaluates one preregistered loss-compression state on the frozen 2025
+P3 sample while preserving immediate entry, structural stop, and fixed `2 ATR`
+target:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase4-historical
+```
+
+The contract is in
+[`docs/TECHNICAL_PLAN_PHASE4.md`](docs/TECHNICAL_PLAN_PHASE4.md). The candidate
+reduced drawdown but remained negative after costs, so the management-repair
+line is closed in [`docs/PHASE4_RESULTS.md`](docs/PHASE4_RESULTS.md).

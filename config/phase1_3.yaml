@@ -1,0 +1,45 @@
+phase: phase1_3_stop_adequacy_audit
+status: preregistered_before_path_audit
+
+parent:
+  branch: phase/01-1-full-session-setups
+  fingerprint: 90d1e369b427d3d8
+  baseline_model: p3_m15_structure
+
+scope:
+  periods: [construction, replication]
+  years: [2024, 2025]
+  sessions: [london, new_york]
+  signal_selection: frozen_parent_p3_signals
+  alter_signals: false
+  strategy_pnl_selection: false
+
+path_measurement:
+  timeframe: 5min
+  start: observed_entry_bar
+  end: session_cutoff_exclusive
+  long_entry_quote: ask_open
+  long_path_quote: bid
+  short_entry_quote: bid_open
+  short_path_quote: ask
+  anchor: observed_entry_quote_before_slippage
+  stop_disabled_during_measurement: true
+  commission_in_excursion: false
+  slippage_in_excursion: false
+  observed_spread_in_excursion: true
+  same_bar_policy: ambiguous_stop_first
+  later_target_requires_later_m5_bar: true
+
+thresholds:
+  stop_atr_multiples: [1.0, 1.25, 1.5, 2.0]
+  fixed_target_atr: 2.0
+  rr_preserving_target_multiple: 2.0
+
+reporting:
+  scopes: [overall, session, direction]
+  excursion_quantiles: [0.25, 0.50, 0.75, 0.90]
+  separate_periods: true
+  report_fixed_target_paths: true
+  report_rr_preserving_paths: true
+  winner_selection: none
+
