@@ -1422,6 +1422,122 @@ class Phase3Config(StrictModel):
         return self
 
 
+class Phase31ParentConfig(StrictModel):
+    branch: Literal["phase/03-price-action-state-machine"]
+    coverage_fingerprint: Literal["c29e50d70f87c916"]
+    coverage_gate_passed: Literal[True]
+    setup_family: Literal["with_trend_second_entry"]
+    selected_and_triggered_only: Literal[True]
+    expected_setup_count: Literal[164]
+    setup_membership_sha256: Literal[
+        "9fc2ef0753d36450bbde995d96bcd0f64209e2f90c3a31cb374fba5f69c39996"
+    ]
+    returns_inspected_when_selected: Literal[False]
+
+
+class Phase31ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    excluded_setup_families: tuple[
+        Literal["failed_range_break_fade", "accepted_breakout_pullback"], ...
+    ]
+    historical_replication_access_allowed: Literal[False]
+    maximum_trades_per_session: dict[Literal["london", "new_york"], int]
+
+
+class Phase31BracketConfig(StrictModel):
+    order_type: Literal["stop"]
+    long_entry_quote: Literal["ask"]
+    short_entry_quote: Literal["bid"]
+    entry_gap_fill: Literal["worse_executable_open"]
+    long_stop_quote: Literal["bid"]
+    short_stop_quote: Literal["ask"]
+    stop_definition: Literal["signal_bar_quote_extreme"]
+    stop_buffer_pips: float = Field(ge=0)
+    target_definition: Literal["fixed_geometric_r"]
+    target_r: float = Field(gt=0)
+    bracket_anchor: Literal["entry_reference_before_slippage"]
+    invalid_stop_action: Literal["audit_failure"]
+
+
+class Phase31RiskConfig(StrictModel):
+    fixed_geometric_risk_usd: float = Field(gt=0)
+    usd_per_pip_per_standard_lot: float = Field(gt=0)
+    lot_quantization_enabled: Literal[False]
+    risk_denominator: Literal["entry_reference_to_signal_bar_stop"]
+
+
+class Phase31ExecutionConfig(StrictModel):
+    observed_bid_ask: Literal[True]
+    primary_slippage_pips_per_side: float = Field(ge=0)
+    stress_slippage_pips_per_side: float = Field(ge=0)
+    commission_pips_per_side: float = Field(ge=0)
+    intrabar_priority: Literal["stop_first"]
+    entry_bar_ambiguity: Literal["conservative_stop_first"]
+    stop_gap_fill: Literal["worse_executable_open"]
+    target_gap_fill: Literal["target_without_price_improvement"]
+    force_flat_at_session_cutoff: Literal[True]
+    swap_enabled: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_slippage(self) -> Phase31ExecutionConfig:
+        if self.stress_slippage_pips_per_side <= self.primary_slippage_pips_per_side:
+            raise ValueError("Phase 3.1 stress slippage must exceed primary")
+        return self
+
+
+class Phase31StatisticsConfig(StrictModel):
+    bootstrap_unit: Literal["session_date"]
+    bootstrap_resamples: int = Field(ge=100)
+    confidence_level: float = Field(gt=0, lt=1)
+    random_seed: int = Field(ge=0)
+
+
+class Phase31ConstructionGateConfig(StrictModel):
+    candidate: Literal["with_trend_second_entry_signal_bar_stop_2r"]
+    require_zero_invariant_failures: Literal[True]
+    require_exact_parent_membership: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_stress_mean_trade_net_r: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_day_cluster_ci_lower_above_zero: Literal[True]
+    maximum_best_month_share_of_positive_r: float = Field(gt=0, le=1)
+    passed_action: Literal["candidate_for_external_broker_validation"]
+    failed_action: Literal["stop_without_replication"]
+
+
+class Phase31Config(StrictModel):
+    phase: Literal["phase3_1_trend_second_entry_outcomes"]
+    status: Literal["preregistered_before_construction_returns"]
+    parent: Phase31ParentConfig
+    scope: Phase31ScopeConfig
+    entry_and_bracket: Phase31BracketConfig
+    risk: Phase31RiskConfig
+    execution: Phase31ExecutionConfig
+    statistics: Phase31StatisticsConfig
+    construction_gate: Phase31ConstructionGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase31Config:
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 3.1 sessions must remain frozen")
+        if self.scope.excluded_setup_families != (
+            "failed_range_break_fade",
+            "accepted_breakout_pullback",
+        ):
+            raise ValueError("Phase 3.1 excluded setup families must remain frozen")
+        if self.scope.maximum_trades_per_session != {
+            "london": 1,
+            "new_york": 2,
+        }:
+            raise ValueError("Phase 3.1 session caps must remain frozen")
+        if self.entry_and_bracket.target_r != 2.0:
+            raise ValueError("Phase 3.1 target must remain frozen at 2R")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -1438,6 +1554,7 @@ class ProjectConfig(StrictModel):
     phase1_5_coverage_selection: Phase15CoverageSelectionConfig
     phase2: Phase2Config
     phase3: Phase3Config
+    phase3_1: Phase31Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -1501,6 +1618,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase3=Phase3Config.model_validate(
             _read_yaml(config_directory / "phase3.yaml")
+        ),
+        phase3_1=Phase31Config.model_validate(
+            _read_yaml(config_directory / "phase3_1.yaml")
         ),
     )
 

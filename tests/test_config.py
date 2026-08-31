@@ -122,6 +122,17 @@ def test_checked_in_configuration_is_valid() -> None:
         240,
         480,
     )
+    assert config.phase3_1.parent.coverage_fingerprint == "c29e50d70f87c916"
+    assert config.phase3_1.parent.expected_setup_count == 164
+    assert config.phase3_1.parent.returns_inspected_when_selected is False
+    assert config.phase3_1.scope.excluded_setup_families == (
+        "failed_range_break_fade",
+        "accepted_breakout_pullback",
+    )
+    assert config.phase3_1.entry_and_bracket.stop_buffer_pips == pytest.approx(0.1)
+    assert config.phase3_1.entry_and_bracket.target_r == pytest.approx(2.0)
+    assert config.phase3_1.risk.fixed_geometric_risk_usd == pytest.approx(30.0)
+    assert config.phase3_1.construction_gate.require_day_cluster_ci_lower_above_zero
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 
