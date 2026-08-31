@@ -24,3 +24,11 @@ def test_phase2_command_is_registered() -> None:
     args = build_parser().parse_args(["run-phase2-directional-audit"])
 
     assert args.command == "run-phase2-directional-audit"
+
+
+def test_phase4_command_is_registered() -> None:
+    from gbpusd_structure.cli import build_parser
+
+    args = build_parser().parse_args(["run-phase4-historical"])
+
+    assert args.command == "run-phase4-historical"
