@@ -211,3 +211,16 @@ The preregistered contract is in
 [`docs/TECHNICAL_PLAN_PHASE2.md`](docs/TECHNICAL_PLAN_PHASE2.md). No primitive
 qualified; the current mechanical structure-signal thesis is closed in
 [`docs/PHASE2_RESULTS.md`](docs/PHASE2_RESULTS.md).
+
+Phase 3 translates the sequential trendline, final-extreme, range-break,
+two-leg pullback, EMA21 key-location, congestion, and signal-bar rules from the
+supplied price-action video into a causal M15/M5 state machine:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase3-state-coverage
+```
+
+The frozen definition is in
+[`docs/TECHNICAL_PLAN_PHASE3.md`](docs/TECHNICAL_PLAN_PHASE3.md). The return-blind
+coverage gate passed for the with-trend second-entry family; details are in
+[`docs/PHASE3_COVERAGE_RESULTS.md`](docs/PHASE3_COVERAGE_RESULTS.md).
