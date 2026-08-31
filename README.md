@@ -25,14 +25,17 @@ future leakage.
 
 ## Current status
 
-Phase 1.2 tested whether light causal filters could reduce full-session P3 from
-approximately 32 to 20–25 trades per month while improving quality. A staged
-lock screened coverage before P&L and allowed only displacement (F1) and a
-non-opposition H1+H4 veto (F4) into 2024 construction.
+Phase 4 returned to the best-looking Phase 1.4 geometry: immediate P3 entry,
+causal structural invalidation stop, and a fixed `+2 signal ATR` target. One
+trade-management candidate moved the stop to gross entry after a completed M5
+bar reached `+1 ATR`, effective from the next M5 bar.
 
-The frequency target was reached, but neither filter was positive. F1 produced
-275 trades at `-0.346R/trade`; F4 produced 288 at `-0.230R/trade`. No filter
-qualified for selection, so 2025 filter P&L remained unopened by design.
+On all 383 frozen 2025 signals, management improved expectancy by
+`+0.0145R/trade` and reduced maximum drawdown from `28.90R` to `18.04R`.
+However, the candidate remained negative at `-0.0267R/trade` with profit factor
+`0.886`; its paired 95% interval crossed zero. Both sessions and both
+directions failed positive-expectancy gates. This management repair is closed
+without threshold or subgroup retuning.
 
 - The Phase-1.1 run had zero point-in-time, session, parent, or execution
   invariant failures.
@@ -40,6 +43,8 @@ qualified for selection, so 2025 filter P&L remained unopened by design.
 - Order Blocks remain diagnostic only after the Phase-0.2 geometry failure and
   were not used anywhere in Phase 1 or Phase 1.1.
 - Fundamentals, EMA, and RSI remain untested incremental layers.
+- The 2025 Phase 4 result is historical replication, not a pristine
+  program-wide holdout or broker-specific Exness validation.
 
 See:
 
@@ -60,6 +65,16 @@ See:
 - `docs/TECHNICAL_PLAN_PHASE1_2.md`
 - `docs/PHASE1_2_COVERAGE_RESULTS.md`
 - `docs/PHASE1_2_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_3.md`
+- `docs/PHASE1_3_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_4.md`
+- `docs/PHASE1_4_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE1_5.md`
+- `docs/PHASE1_5_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE2.md`
+- `docs/PHASE2_RESULTS.md`
+- `docs/TECHNICAL_PLAN_PHASE4.md`
+- `docs/PHASE4_RESULTS.md`
 
 ## Setup
 
@@ -211,3 +226,16 @@ The preregistered contract is in
 [`docs/TECHNICAL_PLAN_PHASE2.md`](docs/TECHNICAL_PLAN_PHASE2.md). No primitive
 qualified; the current mechanical structure-signal thesis is closed in
 [`docs/PHASE2_RESULTS.md`](docs/PHASE2_RESULTS.md).
+
+Phase 4 evaluates one preregistered loss-compression state on the frozen 2025
+P3 sample while preserving immediate entry, structural stop, and fixed `2 ATR`
+target:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase4-historical
+```
+
+The contract is in
+[`docs/TECHNICAL_PLAN_PHASE4.md`](docs/TECHNICAL_PLAN_PHASE4.md). The candidate
+reduced drawdown but remained negative after costs, so the management-repair
+line is closed in [`docs/PHASE4_RESULTS.md`](docs/PHASE4_RESULTS.md).
