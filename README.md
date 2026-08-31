@@ -224,3 +224,16 @@ The frozen definition is in
 [`docs/TECHNICAL_PLAN_PHASE3.md`](docs/TECHNICAL_PLAN_PHASE3.md). The return-blind
 coverage gate passed for the with-trend second-entry family; details are in
 [`docs/PHASE3_COVERAGE_RESULTS.md`](docs/PHASE3_COVERAGE_RESULTS.md).
+
+Phase 3.1 opens 2024 outcomes only for the frozen 164 triggered with-trend
+second entries:
+
+```bash
+.venv/bin/python -m gbpusd_structure run-phase3-1-construction
+```
+
+The signal-bar stop / `2R` bracket failed with `-73.07R`, mean `-0.446R`, and
+profit factor `0.455`, with zero invariant failures. The registered contract is
+in [`docs/TECHNICAL_PLAN_PHASE3_1.md`](docs/TECHNICAL_PLAN_PHASE3_1.md), and the
+result and post-hoc exit-path diagnosis are in
+[`docs/PHASE3_1_RESULTS.md`](docs/PHASE3_1_RESULTS.md).
