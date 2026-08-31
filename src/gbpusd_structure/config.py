@@ -1281,6 +1281,136 @@ class Phase2Config(StrictModel):
         return self
 
 
+class Phase4ParentConfig(StrictModel):
+    signal_branch: Literal["phase/01-1-full-session-setups"]
+    signal_fingerprint: Literal["90d1e369b427d3d8"]
+    structural_branch: Literal["phase/01-4-structural-stop-ablation"]
+    structural_construction_fingerprint: Literal["41fe02f5ef90868b"]
+    signal_model: Literal["p3_m15_structure"]
+    expected_signal_count: Literal[383]
+    signal_membership_sha256: Literal[
+        "d7bf7882c2cc08184d34c41b47ee91dd6b41cc8cc98494736f2fe148cfe2753a"
+    ]
+
+
+class Phase4ScopeConfig(StrictModel):
+    evaluation_year: Literal[2025]
+    evidence_role: Literal["historical_replication_not_pristine_holdout"]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    frozen_parent_signals: Literal[True]
+    alter_signal_frequency: Literal[False]
+    construction_candidate_returns_access_allowed: Literal[False]
+    warmup_year: Literal[2024]
+    warmup_role: Literal["causal_structure_labels_only"]
+
+
+class Phase4BracketConfig(StrictModel):
+    entry: Literal["immediate_parent_entry"]
+    hard_stop: Literal["phase1_4_causal_structure_invalidation"]
+    target: Literal["fixed_signal_atr"]
+    target_signal_atr: Literal[2.0]
+    force_flat_at_session_cutoff: Literal[True]
+
+
+class Phase4VariantConfig(StrictModel):
+    id: Literal[
+        "structure_stop_target_2atr_baseline",
+        "structure_stop_target_2atr_be_after_1atr",
+    ]
+    management: Literal[
+        "static_structural_stop",
+        "breakeven_after_completed_m5_reaches_1_signal_atr",
+    ]
+    role: Literal["frozen_reference", "sole_candidate"]
+
+
+class Phase4ProtectionConfig(StrictModel):
+    favorable_trigger_signal_atr: Literal[1.0]
+    trigger_observation: Literal["completed_m5_executable_quote_extreme"]
+    activation: Literal["next_m5_bar"]
+    protected_stop: Literal["gross_entry_reference"]
+    irreversible_after_activation: Literal[True]
+    trigger_bar_priority: Literal["stop_then_target_then_activate"]
+    active_bar_priority: Literal["gap_stop_then_stop_then_target"]
+
+
+class Phase4RiskConfig(StrictModel):
+    fixed_geometric_risk_usd: Literal[30.0]
+    usd_per_pip_per_standard_lot: Literal[10.0]
+    lot_quantization_enabled: Literal[False]
+    risk_denominator: Literal["entry_to_structural_stop_before_costs"]
+
+
+class Phase4ExecutionConfig(StrictModel):
+    observed_bid_ask: Literal[True]
+    primary_slippage_pips_per_side: Literal[0.1]
+    stress_slippage_pips_per_side: Literal[0.2]
+    commission_pips_per_side: Literal[0.35]
+    intrabar_priority: Literal["stop_first"]
+    stop_gap_fill: Literal["worse_executable_open"]
+    target_gap_fill: Literal["target_without_price_improvement"]
+    swap_enabled: Literal[False]
+
+
+class Phase4StatisticsConfig(StrictModel):
+    paired_cluster_unit: Literal["session_date"]
+    bootstrap_resamples: Literal[10000]
+    confidence_level: Literal[0.95]
+    random_seed: Literal[20260901]
+
+
+class Phase4HistoricalGateConfig(StrictModel):
+    candidate: Literal["structure_stop_target_2atr_be_after_1atr"]
+    require_zero_invariant_failures: Literal[True]
+    require_exact_parent_membership: Literal[True]
+    require_positive_mean_trade_net_r: Literal[True]
+    require_profit_factor_above_one: Literal[True]
+    require_positive_paired_improvement_over_baseline: Literal[True]
+    require_paired_improvement_ci_lower_above_zero: Literal[True]
+    require_positive_stress_mean_trade_net_r: Literal[True]
+    require_positive_expectancy_each_session: Literal[True]
+    require_positive_expectancy_each_direction: Literal[True]
+    require_lower_maximum_drawdown_than_baseline: Literal[True]
+    maximum_best_month_share_of_positive_r: Literal[0.5]
+    passed_action: Literal["candidate_for_exness_or_forward_validation"]
+    failed_action: Literal["close_structure_stop_2atr_management_repair"]
+
+
+class Phase4Config(StrictModel):
+    phase: Literal["phase4_structure_stop_2atr_management"]
+    status: Literal["preregistered_before_2025_management_returns"]
+    parent: Phase4ParentConfig
+    scope: Phase4ScopeConfig
+    bracket: Phase4BracketConfig
+    variants: tuple[Phase4VariantConfig, ...]
+    protection: Phase4ProtectionConfig
+    risk: Phase4RiskConfig
+    execution: Phase4ExecutionConfig
+    statistics: Phase4StatisticsConfig
+    historical_gate: Phase4HistoricalGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase4Config:
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 4 sessions must remain frozen")
+        expected = (
+            (
+                "structure_stop_target_2atr_baseline",
+                "static_structural_stop",
+                "frozen_reference",
+            ),
+            (
+                "structure_stop_target_2atr_be_after_1atr",
+                "breakeven_after_completed_m5_reaches_1_signal_atr",
+                "sole_candidate",
+            ),
+        )
+        actual = tuple((item.id, item.management, item.role) for item in self.variants)
+        if actual != expected:
+            raise ValueError("Phase 4 variants must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -1296,6 +1426,7 @@ class ProjectConfig(StrictModel):
     phase1_5: Phase15Config
     phase1_5_coverage_selection: Phase15CoverageSelectionConfig
     phase2: Phase2Config
+    phase4: Phase4Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -1356,6 +1487,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase2=Phase2Config.model_validate(
             _read_yaml(config_directory / "phase2.yaml")
+        ),
+        phase4=Phase4Config.model_validate(
+            _read_yaml(config_directory / "phase4.yaml")
         ),
     )
 

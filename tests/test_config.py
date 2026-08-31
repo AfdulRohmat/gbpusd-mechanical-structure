@@ -108,6 +108,18 @@ def test_checked_in_configuration_is_valid() -> None:
     assert config.phase2.outcomes.primary_horizon_minutes == 60
     assert config.phase2.baselines.recent_breakout_lookback_m15_bars == 4
     assert config.phase2.decision_gate.minimum_primary_events == 120
+    assert config.phase4.parent.expected_signal_count == 383
+    assert config.phase4.scope.evaluation_year == 2025
+    assert config.phase4.scope.construction_candidate_returns_access_allowed is False
+    assert tuple(item.id for item in config.phase4.variants) == (
+        "structure_stop_target_2atr_baseline",
+        "structure_stop_target_2atr_be_after_1atr",
+    )
+    assert config.phase4.protection.favorable_trigger_signal_atr == pytest.approx(1.0)
+    assert config.phase4.bracket.target_signal_atr == pytest.approx(2.0)
+    assert (
+        config.phase4.historical_gate.require_positive_paired_improvement_over_baseline
+    )
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

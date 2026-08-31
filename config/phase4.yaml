@@ -1,0 +1,83 @@
+phase: phase4_structure_stop_2atr_management
+status: preregistered_before_2025_management_returns
+
+parent:
+  signal_branch: phase/01-1-full-session-setups
+  signal_fingerprint: 90d1e369b427d3d8
+  structural_branch: phase/01-4-structural-stop-ablation
+  structural_construction_fingerprint: 41fe02f5ef90868b
+  signal_model: p3_m15_structure
+  expected_signal_count: 383
+  signal_membership_sha256: d7bf7882c2cc08184d34c41b47ee91dd6b41cc8cc98494736f2fe148cfe2753a
+
+scope:
+  evaluation_year: 2025
+  evidence_role: historical_replication_not_pristine_holdout
+  sessions: [london, new_york]
+  frozen_parent_signals: true
+  alter_signal_frequency: false
+  construction_candidate_returns_access_allowed: false
+  warmup_year: 2024
+  warmup_role: causal_structure_labels_only
+
+bracket:
+  entry: immediate_parent_entry
+  hard_stop: phase1_4_causal_structure_invalidation
+  target: fixed_signal_atr
+  target_signal_atr: 2.0
+  force_flat_at_session_cutoff: true
+
+variants:
+  - id: structure_stop_target_2atr_baseline
+    management: static_structural_stop
+    role: frozen_reference
+  - id: structure_stop_target_2atr_be_after_1atr
+    management: breakeven_after_completed_m5_reaches_1_signal_atr
+    role: sole_candidate
+
+protection:
+  favorable_trigger_signal_atr: 1.0
+  trigger_observation: completed_m5_executable_quote_extreme
+  activation: next_m5_bar
+  protected_stop: gross_entry_reference
+  irreversible_after_activation: true
+  trigger_bar_priority: stop_then_target_then_activate
+  active_bar_priority: gap_stop_then_stop_then_target
+
+risk:
+  fixed_geometric_risk_usd: 30.0
+  usd_per_pip_per_standard_lot: 10.0
+  lot_quantization_enabled: false
+  risk_denominator: entry_to_structural_stop_before_costs
+
+execution:
+  observed_bid_ask: true
+  primary_slippage_pips_per_side: 0.10
+  stress_slippage_pips_per_side: 0.20
+  commission_pips_per_side: 0.35
+  intrabar_priority: stop_first
+  stop_gap_fill: worse_executable_open
+  target_gap_fill: target_without_price_improvement
+  swap_enabled: false
+
+statistics:
+  paired_cluster_unit: session_date
+  bootstrap_resamples: 10000
+  confidence_level: 0.95
+  random_seed: 20260901
+
+historical_gate:
+  candidate: structure_stop_target_2atr_be_after_1atr
+  require_zero_invariant_failures: true
+  require_exact_parent_membership: true
+  require_positive_mean_trade_net_r: true
+  require_profit_factor_above_one: true
+  require_positive_paired_improvement_over_baseline: true
+  require_paired_improvement_ci_lower_above_zero: true
+  require_positive_stress_mean_trade_net_r: true
+  require_positive_expectancy_each_session: true
+  require_positive_expectancy_each_direction: true
+  require_lower_maximum_drawdown_than_baseline: true
+  maximum_best_month_share_of_positive_r: 0.50
+  passed_action: candidate_for_exness_or_forward_validation
+  failed_action: close_structure_stop_2atr_management_repair
