@@ -108,6 +108,20 @@ def test_checked_in_configuration_is_valid() -> None:
     assert config.phase2.outcomes.primary_horizon_minutes == 60
     assert config.phase2.baselines.recent_breakout_lookback_m15_bars == 4
     assert config.phase2.decision_gate.minimum_primary_events == 120
+    assert config.phase3.source.transcript_role == "hypothesis_source_only"
+    assert config.phase3.scope.returns_access_allowed is False
+    assert config.phase3.scope.pnl_access_allowed is False
+    assert config.phase3.m15_regime.range_window_bars == 20
+    assert config.phase3.m5_setup.ema_period == 21
+    assert config.phase3.m5_setup.setup_families == (
+        "with_trend_second_entry",
+        "failed_range_break_fade",
+        "accepted_breakout_pullback",
+    )
+    assert config.phase3.coverage_gate.desired_triggered_setups_per_year == (
+        240,
+        480,
+    )
     assert config.execution.pricing.broker_specific_spread_claim is False
     assert config.execution.costs.commission_pips_per_side == pytest.approx(0.35)
 

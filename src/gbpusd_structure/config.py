@@ -1281,6 +1281,147 @@ class Phase2Config(StrictModel):
         return self
 
 
+class Phase3SourceConfig(StrictModel):
+    video_url: Literal["https://youtu.be/TegF3yYjnng"]
+    transcript_role: Literal["hypothesis_source_only"]
+    unverified_claims_are_assumptions: Literal[True]
+
+
+class Phase3ScopeConfig(StrictModel):
+    construction_year: Literal[2024]
+    historical_replication_year: Literal[2025]
+    sessions: tuple[Literal["london", "new_york"], ...]
+    regime_timeframe: Literal["15min"]
+    setup_timeframe: Literal["5min"]
+    returns_access_allowed: Literal[False]
+    pnl_access_allowed: Literal[False]
+    historical_replication_access_allowed: Literal[False]
+
+
+class Phase3RegimeConfig(StrictModel):
+    atr_period: Literal[14]
+    swing_left_bars: Literal[2]
+    swing_right_bars: Literal[2]
+    trend_definition: Literal["latest_confirmed_hh_hl_or_lh_ll"]
+    trendline_definition: Literal["last_two_confirmed_opposing_pivots"]
+    trendline_break_confirmation: Literal["close"]
+    trendline_break_buffer_atr: float = Field(ge=0)
+    final_extreme_near_equal_tolerance_atr: float = Field(ge=0)
+    opposite_proven_trend_overrides_pending_extreme: Literal[True]
+    range_window_bars: int = Field(ge=8)
+    range_minimum_swing_touches_per_side: int = Field(ge=2)
+    range_boundary_cluster_tolerance_atr: float = Field(gt=0)
+    range_efficiency_maximum: float = Field(gt=0, lt=1)
+    range_width_minimum_atr: float = Field(gt=0)
+    range_width_maximum_atr: float = Field(gt=0)
+    range_breakout_buffer_atr: float = Field(ge=0)
+    range_acceptance_consecutive_closes: int = Field(ge=2)
+    range_retest_tolerance_atr: float = Field(ge=0)
+    range_resolution_bars: int = Field(ge=1)
+    range_middle_fraction: tuple[float, float]
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> Phase3RegimeConfig:
+        if self.range_width_minimum_atr >= self.range_width_maximum_atr:
+            raise ValueError("Phase 3 range widths must increase")
+        lower, upper = self.range_middle_fraction
+        if not 0 < lower < upper < 1:
+            raise ValueError("Phase 3 range-middle fractions must increase")
+        return self
+
+
+Phase3KeyEntrySource = Literal[
+    "ema21", "projected_m15_trendline", "frozen_range_boundary"
+]
+Phase3SetupFamily = Literal[
+    "with_trend_second_entry",
+    "failed_range_break_fade",
+    "accepted_breakout_pullback",
+]
+
+
+class Phase3SetupConfig(StrictModel):
+    ema_period: Literal[21]
+    key_entry_sources: tuple[Phase3KeyEntrySource, ...]
+    key_entry_tolerance_m15_atr: float = Field(gt=0)
+    leg_new_extreme_buffer_m15_atr: float = Field(ge=0)
+    maximum_bars_between_pullback_attempts: int = Field(ge=2)
+    signal_bar_minimum_body_fraction: float = Field(gt=0, le=1)
+    signal_bar_minimum_close_location: float = Field(gt=0.5, le=1)
+    signal_bar_minimum_range_m5_atr: float = Field(gt=0)
+    signal_wait_bars_after_m15_event: int = Field(ge=1)
+    entry_trigger_buffer_pips: float = Field(ge=0)
+    entry_trigger_valid_bars: int = Field(ge=1)
+    setup_families: tuple[Phase3SetupFamily, ...]
+    maximum_selected_setups_per_session: dict[
+        Literal["london", "new_york"], int
+    ]
+
+    @model_validator(mode="after")
+    def validate_setup_contract(self) -> Phase3SetupConfig:
+        if self.key_entry_sources != (
+            "ema21",
+            "projected_m15_trendline",
+            "frozen_range_boundary",
+        ):
+            raise ValueError("Phase 3 key-entry source order must remain frozen")
+        if self.setup_families != (
+            "with_trend_second_entry",
+            "failed_range_break_fade",
+            "accepted_breakout_pullback",
+        ):
+            raise ValueError("Phase 3 setup family order must remain frozen")
+        if self.maximum_selected_setups_per_session != {
+            "london": 1,
+            "new_york": 2,
+        }:
+            raise ValueError("Phase 3 session setup caps must remain frozen")
+        return self
+
+
+class Phase3CongestionConfig(StrictModel):
+    lookback_m5_bars: int = Field(ge=2)
+    maximum_total_range_m5_atr: float = Field(gt=0)
+    minimum_mean_adjacent_overlap: float = Field(ge=0, le=1)
+
+
+class Phase3CoverageGateConfig(StrictModel):
+    require_zero_invariant_failures: Literal[True]
+    minimum_classified_m15_fraction: float = Field(gt=0, le=1)
+    minimum_setup_signals_per_year: int = Field(ge=1)
+    minimum_triggered_setups_per_year: int = Field(ge=1)
+    desired_triggered_setups_per_year: tuple[int, int]
+    minimum_trigger_rate: float = Field(gt=0, le=1)
+    minimum_each_session: int = Field(ge=1)
+    minimum_each_direction: int = Field(ge=1)
+    no_eligible_setup_action: Literal["stop_without_pnl"]
+    eligible_setup_action: Literal["freeze_before_construction_pnl"]
+
+    @model_validator(mode="after")
+    def validate_coverage(self) -> Phase3CoverageGateConfig:
+        lower, upper = self.desired_triggered_setups_per_year
+        if not 0 < lower < upper:
+            raise ValueError("Phase 3 desired coverage must increase")
+        return self
+
+
+class Phase3Config(StrictModel):
+    phase: Literal["phase3_price_action_state_machine"]
+    status: Literal["preregistered_before_state_coverage"]
+    source: Phase3SourceConfig
+    scope: Phase3ScopeConfig
+    m15_regime: Phase3RegimeConfig
+    m5_setup: Phase3SetupConfig
+    congestion_veto: Phase3CongestionConfig
+    coverage_gate: Phase3CoverageGateConfig
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> Phase3Config:
+        if self.scope.sessions != ("london", "new_york"):
+            raise ValueError("Phase 3 sessions must remain frozen")
+        return self
+
+
 class ProjectConfig(StrictModel):
     research: ResearchConfig
     sessions: SessionsConfig
@@ -1296,6 +1437,7 @@ class ProjectConfig(StrictModel):
     phase1_5: Phase15Config
     phase1_5_coverage_selection: Phase15CoverageSelectionConfig
     phase2: Phase2Config
+    phase3: Phase3Config
 
 
 def _read_yaml(path: Path) -> object:
@@ -1356,6 +1498,9 @@ def load_project_config(config_directory: Path) -> ProjectConfig:
         ),
         phase2=Phase2Config.model_validate(
             _read_yaml(config_directory / "phase2.yaml")
+        ),
+        phase3=Phase3Config.model_validate(
+            _read_yaml(config_directory / "phase3.yaml")
         ),
     )
 
