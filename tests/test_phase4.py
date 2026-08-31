@@ -7,6 +7,7 @@ from gbpusd_structure.config import load_project_config
 from gbpusd_structure.phase4 import (
     BASELINE_ID,
     CANDIDATE_ID,
+    _invariant_failures,
     _trade_path,
     signal_membership_sha256,
     simulate_management_variants,
@@ -256,3 +257,65 @@ def test_variants_are_identical_when_trigger_is_never_reached() -> None:
     assert candidate["exit_at"] == baseline["exit_at"]
     assert candidate["exit_reason"] == baseline["exit_reason"]
     assert candidate["net_r"] == pytest.approx(baseline["net_r"])
+
+
+def test_invariants_keep_full_candidate_trade_schema() -> None:
+    config = load_project_config(PROJECT_ROOT / "config")
+    setup = {
+        **_setup(),
+        "source_event_match": True,
+        "structural_swing_available_at": pd.Timestamp("2025-01-02T07:45:00Z"),
+        "structural_swing_event_at": pd.Timestamp("2025-01-02T07:00:00Z"),
+    }
+    bars = pd.DataFrame(
+        [
+            _bar(
+                "2025-01-02T08:00:00Z",
+                bid_open=1.2700,
+                bid_high=1.2712,
+                bid_low=1.2695,
+                bid_close=1.2705,
+            ),
+            _bar(
+                "2025-01-02T08:05:00Z",
+                bid_open=1.2704,
+                bid_high=1.2706,
+                bid_low=1.2699,
+                bid_close=1.2700,
+            ),
+            _bar(
+                "2025-01-02T08:10:00Z",
+                bid_open=1.2700,
+                bid_high=1.2702,
+                bid_low=1.2698,
+                bid_close=1.2700,
+            ),
+        ]
+    )
+    mappings = pd.DataFrame([setup])
+    primary = simulate_management_variants(
+        mappings,
+        bars,
+        config,
+        slippage_pips_per_side=0.1,
+    )
+    stress = simulate_management_variants(
+        mappings,
+        bars,
+        config,
+        slippage_pips_per_side=0.2,
+    )
+
+    failures = _invariant_failures(
+        pd.DataFrame([{"signal_id": setup["signal_id"]}]),
+        mappings,
+        primary,
+        stress,
+        config,
+    )
+
+    assert isinstance(failures, list)
+    assert not any(
+        item["invariant"] == "protected_exit_requires_prior_activation"
+        for item in failures
+    )

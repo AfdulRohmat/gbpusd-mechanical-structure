@@ -486,9 +486,11 @@ def _invariant_failures(
         "target_price",
     ]
     baseline = primary[primary["model_id"].eq(BASELINE_ID)][comparison_columns]
-    candidate = primary[primary["model_id"].eq(CANDIDATE_ID)][comparison_columns]
+    candidate_comparison = primary[
+        primary["model_id"].eq(CANDIDATE_ID)
+    ][comparison_columns]
     pair = baseline.merge(
-        candidate,
+        candidate_comparison,
         on="signal_id",
         how="outer",
         suffixes=("_baseline", "_candidate"),
@@ -510,7 +512,8 @@ def _invariant_failures(
         )
         add(f"variant_{column}_identical", int((~matches).sum()))
 
-    activated = candidate[candidate["protection_activated"]]
+    candidate_trades = primary[primary["model_id"].eq(CANDIDATE_ID)]
+    activated = candidate_trades[candidate_trades["protection_activated"]]
     add(
         "protection_starts_after_trigger_bar",
         int(
@@ -519,8 +522,10 @@ def _invariant_failures(
             .sum()
         ),
     )
-    protected_exits = candidate[
-        candidate["exit_reason"].isin(["protected_stop", "protected_stop_gap"])
+    protected_exits = candidate_trades[
+        candidate_trades["exit_reason"].isin(
+            ["protected_stop", "protected_stop_gap"]
+        )
     ]
     add(
         "protected_exit_requires_prior_activation",
